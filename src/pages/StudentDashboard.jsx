@@ -1,9 +1,72 @@
 import { useState, useEffect, useRef } from "react";
 import logo from "../assets/logo.jpeg";
-import { eventsAPI, registrationsAPI, savedAPI, interestsAPI } from "../api";
+import { eventsAPI, registrationsAPI, savedAPI, interestsAPI, authAPI } from "../api";
+import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+import L from "leaflet";
+
+// Fix default marker icons for Leaflet + Vite
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+});
+
+// Geocode a location string using Nominatim — returns [lat, lng] or null
+async function geocodeLocation(location, city) {
+  const attempts = [
+    `${location}, ${city}, India`,
+    `${location}, India`,
+    `${city}, India`,
+  ].filter(q => q.trim() !== ", India");
+
+  for (const q of attempts) {
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&countrycodes=in`,
+        { headers: { "User-Agent": "SangamEventsApp/1.0" } }
+      );
+      const data = await res.json();
+      if (data.length > 0) return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+    } catch {}
+    await new Promise(r => setTimeout(r, 300));
+  }
+  return null;
+}
+
+const CITY_COORDS = {
+  "dhanbad":   [23.7957, 86.4304],
+  "ranchi":    [23.3441, 85.3096],
+  "delhi":     [28.6139, 77.2090],
+  "mumbai":    [19.0760, 72.8777],
+  "bangalore": [12.9716, 77.5946],
+  "kolkata":   [22.5726, 88.3639],
+  "hyderabad": [17.3850, 78.4867],
+  "chennai":   [13.0827, 80.2707],
+  "pune":      [18.5204, 73.8567],
+  "jaipur":    [26.9124, 75.7873],
+  "lucknow":   [26.8467, 80.9462],
+  "bhopal":    [23.2599, 77.4126],
+  "indore":    [22.7196, 75.8577],
+  "nagpur":    [21.1458, 79.0882],
+};
+
+function getCityCoords(city) {
+  if (!city) return [20.5937, 78.9629]; // center of India
+  const key = city.toLowerCase().trim();
+  for (const [k, v] of Object.entries(CITY_COORDS)) {
+    if (key.includes(k)) return v;
+  }
+  return [20.5937, 78.9629];
+}
+
+function formatDate(d) {
+  if (!d) return "";
+  return new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
 
 const GLOBAL_CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&display=swap');
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
     --ink: #0c0c14;
@@ -79,9 +142,9 @@ function EventCard({ event, joined, saved, onJoin, onSave, delay = 0 }) {
       <div style={{ padding: "18px 20px" }}>
         <h3 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1rem", marginBottom: 10, lineHeight: 1.3 }}>{event.title}</h3>
         <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: "0.78rem", color: "var(--muted)", marginBottom: 14 }}>
-          <span>📅 {event.date}</span>
-          <span>📍 {event.location} · 🚶 {event.distance}</span>
-          <span style={{ color: event.spots < 10 ? "#c42050" : "#17885a", fontWeight: 600 }}>👥 {event.spots} spots left</span>
+          <span>📅 {formatDate(event.date)}</span>
+          <span>📍 {event.location}</span>
+          <span style={{ color: (event.capacity - event.registered) < 10 ? "#c42050" : "#17885a", fontWeight: 600 }}>👥 {event.capacity - event.registered} spots left</span>
         </div>
         <button onClick={() => onJoin(event.id)}
           style={{ width: "100%", padding: "10px", borderRadius: 100, border: joined ? "1.5px solid var(--border)" : "none", background: joined ? "transparent" : event.grad, color: joined ? "var(--muted)" : "#fff", cursor: "pointer", fontFamily: "var(--ff-body)", fontWeight: 700, fontSize: "0.82rem", transition: "all .2s", letterSpacing: ".02em" }}>
@@ -97,11 +160,14 @@ export default function StudentDashboard({ user, onLogout }) {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [events, setEvents] = useState([]);
+  const [nearbyEvents, setNearbyEvents] = useState([]);
+  const [profile, setProfile] = useState(null);
   const [joinedEvents, setJoinedEvents] = useState(new Set());
   const [savedEvents, setSavedEvents] = useState(new Set());
   const [selectedInterests, setSelectedInterests] = useState(new Set());
   const [sortBy, setSortBy] = useState("date");
   const [loading, setLoading] = useState(true);
+  const [eventCoords, setEventCoords] = useState({});
 
   useEffect(() => {
     if (!document.getElementById("sangam-student-css")) {
@@ -113,16 +179,25 @@ export default function StudentDashboard({ user, onLogout }) {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [evs, myEvs, saved, ints] = await Promise.all([
+      const [evs, myEvs, saved, ints, prof] = await Promise.all([
         eventsAPI.getAll(),
         registrationsAPI.myEvents(),
         savedAPI.getAll(),
         interestsAPI.getAll(),
+        authAPI.me(),
       ]);
       setEvents(evs);
+      setProfile(prof);
       setJoinedEvents(new Set(myEvs.map(e => e.id)));
       setSavedEvents(new Set(saved.map(e => e.id)));
       setSelectedInterests(new Set(ints));
+      // Load nearby events based on profile city
+      if (prof?.city) {
+        const nearby = await eventsAPI.getNearby(prof.city);
+        setNearbyEvents(nearby);
+      } else {
+        setNearbyEvents(evs);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -131,10 +206,9 @@ export default function StudentDashboard({ user, onLogout }) {
   };
 
   useEffect(() => {
-    if (searchQuery !== undefined) {
-      eventsAPI.getAll({ category: selectedCategory !== "All" ? selectedCategory : undefined, search: searchQuery })
-        .then(setEvents).catch(console.error);
-    }
+    if (!searchQuery && selectedCategory === "All") return;
+    eventsAPI.getAll({ category: selectedCategory !== "All" ? selectedCategory : undefined, search: searchQuery || undefined })
+      .then(setEvents).catch(console.error);
   }, [selectedCategory, searchQuery]);
 
   const filtered = events;
@@ -176,6 +250,24 @@ export default function StudentDashboard({ user, onLogout }) {
   };
 
   const pageTitle = { discover: "Discover Events", myevents: "My Events", map: "Events Nearby", interests: "My Interests", calendar: "My Schedule", profile: "My Profile" }[activeTab];
+
+  // Geocode events missing lat/lng when map tab opens
+  useEffect(() => {
+    if (activeTab !== "map" || nearbyEvents.length === 0) return;
+    const missing = nearbyEvents.filter(ev => !ev.lat || !ev.lng);
+    if (missing.length === 0) return;
+
+    (async () => {
+      const coords = { ...eventCoords };
+      for (const ev of missing) {
+        if (coords[ev.id]) continue;
+        const pos = await geocodeLocation(ev.location, ev.city || profile?.city);
+        if (pos) coords[ev.id] = pos;
+        await new Promise(r => setTimeout(r, 350)); // Nominatim rate limit
+      }
+      setEventCoords(coords);
+    })();
+  }, [activeTab, nearbyEvents]);
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: "var(--cream)", fontFamily: "var(--ff-body)", color: "var(--ink)" }}>
@@ -220,7 +312,7 @@ export default function StudentDashboard({ user, onLogout }) {
             <h1 style={{ fontFamily: "var(--ff-display)", fontWeight: 900, fontSize: "1.5rem", color: "var(--ink)" }}>{pageTitle}</h1>
             <p style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: 2 }}>
               <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "var(--sage)", marginRight: 5, animation: "pulse-dot 2s infinite", verticalAlign: "middle" }}/>
-              Patna, Bihar · {new Date().toLocaleDateString("en-IN", { weekday: "long", month: "long", day: "numeric" })}
+              {profile?.city || user?.city || "Your City"} · {new Date().toLocaleDateString("en-IN", { weekday: "long", month: "long", day: "numeric" })}
             </p>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -245,10 +337,10 @@ export default function StudentDashboard({ user, onLogout }) {
               {/* Stats */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 32 }}>
                 {[
-                  { label: "Events Joined", value: joinedEvents.size, color: "var(--saffron)", bg: "rgba(244,160,35,.08)", icon: "◈" },
-                  { label: "Saved Events", value: savedEvents.size, color: "#c42050", bg: "rgba(196,32,80,.06)", icon: "♥" },
-                  { label: "Near You", value: "8", color: "var(--indigo)", bg: "rgba(61,59,245,.06)", icon: "◉" },
-                  { label: "This Month", value: "24", color: "var(--sage)", bg: "rgba(23,136,90,.06)", icon: "▦" },
+                  { label: "Events Joined", value: joinedEvents.size, color: "var(--saffron)" },
+                  { label: "Saved Events",  value: savedEvents.size,  color: "#c42050" },
+                  { label: "Near You",      value: nearbyEvents.length, color: "var(--indigo)" },
+                  { label: "Total Events",  value: events.length,     color: "var(--sage)" },
                 ].map((s, i) => (
                   <div key={i} style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 16, padding: "20px 22px", borderTop: `3px solid ${s.color}` }}>
                     <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 8 }}>{s.label}</div>
@@ -305,7 +397,7 @@ export default function StudentDashboard({ user, onLogout }) {
                       <div style={{ width: 50, height: 50, borderRadius: 14, background: ev.grad, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.4rem", flexShrink: 0 }}>{ev.image}</div>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 700, fontSize: "0.9rem", fontFamily: "var(--ff-display)" }}>{ev.title}</div>
-                        <div style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: 3 }}>📅 {ev.date} · 📍 {ev.location}</div>
+                        <div style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: 3 }}>📅 {formatDate(ev.date)} · 📍 {ev.location}</div>
                       </div>
                       <div style={{ background: "rgba(23,136,90,.08)", color: "var(--sage)", borderRadius: 100, padding: "4px 14px", fontSize: "0.72rem", fontWeight: 700, border: "1px solid rgba(23,136,90,.2)" }}>Confirmed</div>
                       <button onClick={() => toggleJoin(ev.id)} style={{ padding: "7px 16px", border: "1px solid var(--border)", borderRadius: 100, background: "transparent", color: "var(--muted)", cursor: "pointer", fontSize: "0.78rem", fontFamily: "var(--ff-body)" }}>Cancel</button>
@@ -324,7 +416,7 @@ export default function StudentDashboard({ user, onLogout }) {
                     <div style={{ width: 50, height: 50, borderRadius: 14, background: ev.grad, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.4rem", flexShrink: 0 }}>{ev.image}</div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 700, fontSize: "0.9rem", fontFamily: "var(--ff-display)" }}>{ev.title}</div>
-                      <div style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: 3 }}>📅 {ev.date} · 📍 {ev.location} · {ev.spots} spots left</div>
+                        <div style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: 3 }}>📅 {formatDate(ev.date)} · 📍 {ev.location} · {ev.capacity - ev.registered} spots left</div>
                     </div>
                     <button onClick={() => toggleJoin(ev.id)} style={{ padding: "8px 20px", background: joinedEvents.has(ev.id) ? "transparent" : "var(--ink)", color: joinedEvents.has(ev.id) ? "var(--muted)" : "var(--cream)", border: joinedEvents.has(ev.id) ? "1px solid var(--border)" : "none", borderRadius: 100, cursor: "pointer", fontSize: "0.78rem", fontFamily: "var(--ff-body)", fontWeight: 700 }}>
                       {joinedEvents.has(ev.id) ? "Registered ✓" : "Register →"}
@@ -339,31 +431,107 @@ export default function StudentDashboard({ user, onLogout }) {
           {/* MAP / NEARBY */}
           {activeTab === "map" && (
             <div style={{ animation: "fadeUp .5s ease both" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20, height: 520 }}>
-                <div style={{ background: "var(--ink)", borderRadius: 20, overflow: "hidden", position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse at 40% 40%,rgba(61,59,245,.3),transparent 60%), radial-gradient(ellipse at 70% 70%,rgba(244,160,35,.2),transparent 50%)" }}/>
-                  <div style={{ textAlign: "center", position: "relative", zIndex: 1 }}>
-                    <div style={{ fontSize: "3rem", marginBottom: 12 }}>🗺️</div>
-                    <p style={{ color: "rgba(250,248,243,.5)", fontSize: "0.85rem", fontFamily: "var(--ff-body)" }}>Interactive Map · Patna Region</p>
-                  </div>
-                  {events.map((e, i) => (
-                    <div key={e.id} style={{ position: "absolute", left: `${15 + i * 12}%`, top: `${20 + (i % 3) * 22}%`, width: 38, height: 38, borderRadius: "50%", background: e.grad, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1rem", boxShadow: "0 4px 16px rgba(0,0,0,.4)", border: "2px solid rgba(255,255,255,.3)", cursor: "pointer", zIndex: 2 }}>
-                      {e.image}
-                    </div>
-                  ))}
+              {/* Location banner */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18, background: "#fff", border: "1px solid var(--border)", borderRadius: 14, padding: "12px 20px" }}>
+                <span style={{ fontSize: "1.2rem" }}>📍</span>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: "0.9rem" }}>Showing events near: <span style={{ color: "var(--saffron-g)" }}>{profile?.city || "your location"}</span></div>
+                  <div style={{ fontSize: "0.75rem", color: "var(--muted)" }}>Upcoming &amp; ongoing events · Update your city in Profile to change location</div>
                 </div>
-                <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 20, padding: 22, overflowY: "auto" }}>
-                  <h3 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1rem", marginBottom: 16 }}>Events Near You</h3>
-                  {[...events].sort((a, b) => parseFloat(a.distance) - parseFloat(b.distance)).map(e => (
-                    <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 0", borderBottom: "1px solid var(--border)" }}>
-                      <div style={{ width: 36, height: 36, borderRadius: 10, background: e.grad, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1rem", flexShrink: 0 }}>{e.image}</div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: "0.82rem", fontWeight: 600 }}>{e.title}</div>
-                        <div style={{ fontSize: "0.72rem", color: "var(--muted)", marginTop: 2 }}>{e.date}</div>
-                      </div>
-                      <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--saffron-g)", background: "rgba(244,160,35,.1)", border: "1px solid rgba(244,160,35,.25)", borderRadius: 100, padding: "2px 10px" }}>{e.distance}</div>
+                <div style={{ marginLeft: "auto", background: "rgba(23,136,90,.08)", color: "var(--sage)", borderRadius: 100, padding: "4px 14px", fontSize: "0.72rem", fontWeight: 700, border: "1px solid rgba(23,136,90,.2)" }}>{nearbyEvents.length} events found</div>
+                {nearbyEvents.some(ev => !ev.lat && !ev.lng && !eventCoords[ev.id]) && (
+                  <div style={{ marginLeft: 8, fontSize: "0.72rem", color: "var(--muted)" }}>📡 Locating events on map…</div>
+                )}
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20 }}>
+                {/* Real Leaflet Map centered on user's city */}
+                <div style={{ borderRadius: 20, overflow: "hidden", height: 500, border: "1px solid var(--border)", boxShadow: "0 4px 24px rgba(0,0,0,.08)" }}>
+                  <MapContainer
+                    key={profile?.city || "default"}
+                    center={getCityCoords(profile?.city)}
+                    zoom={profile?.city ? 13 : 5}
+                    style={{ height: "100%", width: "100%" }}
+                    scrollWheelZoom={true}
+                  >
+                    <TileLayer
+                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    />
+                    {/* User location marker */}
+                    {profile?.city && (
+                      <Marker position={getCityCoords(profile.city)}>
+                        <Popup>
+                          <div style={{ fontFamily: "sans-serif" }}>
+                            <div style={{ fontWeight: 700, fontSize: "0.85rem" }}>📍 Your Location</div>
+                            <div style={{ fontSize: "0.75rem", color: "#666" }}>{profile.city}</div>
+                          </div>
+                        </Popup>
+                      </Marker>
+                    )}
+                    {/* Event markers — use DB coords, then live-geocoded coords, skip if neither available */}
+                    {nearbyEvents.map(ev => {
+                      // Priority: DB geocoded > live geocoded this session
+                      const pos = (ev.lat && ev.lng)
+                        ? [parseFloat(ev.lat), parseFloat(ev.lng)]
+                        : eventCoords[ev.id] || getCityCoords(ev.city);
+
+
+                      const isUpcoming = new Date(ev.date) > new Date();
+                      const isToday = new Date(ev.date).toDateString() === new Date().toDateString();
+                      return (
+                        <Marker key={ev.id} position={pos}>
+                          <Popup>
+                            <div style={{ fontFamily: "sans-serif", minWidth: 180 }}>
+                              <div style={{ fontSize: "1.3rem", marginBottom: 4 }}>{ev.image}</div>
+                              <div style={{ fontWeight: 700, fontSize: "0.88rem", marginBottom: 4 }}>{ev.title}</div>
+                              <div style={{ display: "inline-block", background: isToday ? "#f4a023" : "#3d3bf5", color: "#fff", borderRadius: 6, padding: "2px 8px", fontSize: "0.68rem", fontWeight: 700, marginBottom: 6 }}>
+                                {isToday ? "🔴 Today" : isUpcoming ? "🟢 Upcoming" : "🟡 Ongoing"}
+                              </div>
+                              <div style={{ fontSize: "0.75rem", color: "#555" }}>📅 {ev.date} · {ev.time?.slice(0,5)}</div>
+                              <div style={{ fontSize: "0.75rem", color: "#555" }}>📍 {ev.location}{ev.city ? `, ${ev.city}` : ""}</div>
+                              <div style={{ fontSize: "0.75rem", color: ev.capacity - ev.registered < 10 ? "#c42050" : "#17885a", fontWeight: 600, marginTop: 4 }}>
+                                👥 {ev.capacity - ev.registered} spots left
+                              </div>
+                              <button
+                                onClick={() => toggleJoin(ev.id)}
+                                style={{ marginTop: 8, width: "100%", padding: "6px", borderRadius: 8, border: "none", background: joinedEvents.has(ev.id) ? "#e0e0e0" : ev.grad || "#f4a023", color: joinedEvents.has(ev.id) ? "#666" : "#fff", cursor: "pointer", fontWeight: 700, fontSize: "0.75rem" }}>
+                                {joinedEvents.has(ev.id) ? "✓ Registered" : "Register →"}
+                              </button>
+                            </div>
+                          </Popup>
+                        </Marker>
+                      );
+                    })}
+                  </MapContainer>
+                </div>
+
+                {/* Upcoming & Ongoing events list */}
+                <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 20, padding: 22, overflowY: "auto", height: 500 }}>
+                  <h3 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1rem", marginBottom: 4 }}>Near {profile?.city || "You"}</h3>
+                  <p style={{ fontSize: "0.72rem", color: "var(--muted)", marginBottom: 16 }}>Upcoming &amp; ongoing events</p>
+                  {nearbyEvents.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "40px 0", color: "var(--muted)" }}>
+                      <div style={{ fontSize: "2rem", marginBottom: 8 }}>🗺️</div>
+                      <p style={{ fontSize: "0.82rem" }}>No events found near {profile?.city || "your city"}.</p>
+                      <p style={{ fontSize: "0.75rem", marginTop: 4 }}>Update your city in Profile or check back later.</p>
                     </div>
-                  ))}
+                  ) : nearbyEvents.map(ev => {
+                    const isToday = new Date(ev.date).toDateString() === new Date().toDateString();
+                    const isUpcoming = new Date(ev.date) > new Date();
+                    return (
+                      <div key={ev.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 0", borderBottom: "1px solid var(--border)" }}>
+                        <div style={{ width: 38, height: 38, borderRadius: 10, background: ev.grad, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1rem", flexShrink: 0 }}>{ev.image}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: "0.82rem", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ev.title}</div>
+                          <div style={{ fontSize: "0.7rem", color: "var(--muted)", marginTop: 2 }}>📅 {formatDate(ev.date)} · 📍 {ev.location}</div>
+                        </div>
+                        <div style={{ fontSize: "0.65rem", fontWeight: 700, color: isToday ? "#e85d04" : isUpcoming ? "#17885a" : "#3d3bf5", background: isToday ? "rgba(232,93,4,.1)" : isUpcoming ? "rgba(23,136,90,.08)" : "rgba(61,59,245,.06)", borderRadius: 100, padding: "2px 8px", whiteSpace: "nowrap" }}>
+                          {isToday ? "Today" : isUpcoming ? "Upcoming" : "Ongoing"}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -391,46 +559,64 @@ export default function StudentDashboard({ user, onLogout }) {
           )}
 
           {/* CALENDAR */}
-          {activeTab === "calendar" && (
+          {activeTab === "calendar" && (() => {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = now.getMonth();
+            const monthName = now.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const firstDay = new Date(year, month, 1).getDay();
+            const today = now.getDate();
+            const eventDays = new Set(events.filter(e => joinedEvents.has(e.id)).map(e => {
+              const d = new Date(e.date);
+              return d.getFullYear() === year && d.getMonth() === month ? d.getDate() : null;
+            }).filter(Boolean));
+            return (
             <div style={{ animation: "fadeUp .5s ease both" }}>
               <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 20, padding: 28, maxWidth: 420, marginBottom: 32 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 22 }}>
                   <button style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--muted)", borderRadius: 10, width: 34, height: 34, cursor: "pointer", fontSize: "1.1rem" }}>‹</button>
-                  <h3 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1.1rem" }}>April 2026</h3>
+                  <h3 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1.1rem" }}>{monthName}</h3>
                   <button style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--muted)", borderRadius: 10, width: 34, height: 34, cursor: "pointer", fontSize: "1.1rem" }}>›</button>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4 }}>
                   {["S","M","T","W","T","F","S"].map((d, i) => (
                     <div key={i} style={{ textAlign: "center", fontSize: "0.68rem", color: "var(--muted)", padding: "4px 0", fontWeight: 700 }}>{d}</div>
                   ))}
-                  {Array.from({ length: 30 }, (_, i) => i + 1).map(d => {
-                    const hasEvent = [20, 25].includes(d);
-                    const isToday = d === 10;
+                  {Array.from({ length: firstDay }).map((_, i) => <div key={`e${i}`} />)}
+                  {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => {
+                    const hasEvent = eventDays.has(d);
+                    const isToday = d === today;
                     return (
                       <div key={d} style={{ textAlign: "center", padding: "8px 0", borderRadius: 8, fontSize: "0.82rem", color: isToday ? "#fff" : hasEvent ? "var(--indigo)" : "var(--ink)", background: isToday ? "var(--ink)" : "transparent", fontWeight: isToday || hasEvent ? 700 : 400, cursor: "pointer", position: "relative" }}>
                         {d}
-                        {hasEvent && <div style={{ width: 4, height: 4, borderRadius: "50%", background: "var(--saffron)", margin: "2px auto 0" }}/>}
+                        {hasEvent && !isToday && <div style={{ width: 4, height: 4, borderRadius: "50%", background: "var(--saffron)", margin: "2px auto 0" }}/>}
                       </div>
                     );
                   })}
                 </div>
               </div>
-
               <h3 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1.2rem", marginBottom: 16 }}>Upcoming Events</h3>
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {events.filter(e => joinedEvents.has(e.id)).map(ev => (
+                {events.filter(e => joinedEvents.has(e.id)).length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "40px 0", color: "var(--muted)" }}>
+                    <div style={{ fontSize: "2rem", marginBottom: 8 }}>📅</div>
+                    <p style={{ fontSize: "0.82rem" }}>No registered events yet.</p>
+                  </div>
+                ) : events.filter(e => joinedEvents.has(e.id)).map(ev => (
                   <div key={ev.id} style={{ display: "flex", alignItems: "center", gap: 16, background: "#fff", border: "1px solid var(--border)", borderRadius: 16, padding: "16px 20px" }}>
                     <div style={{ width: 4, height: 44, borderRadius: 2, background: ev.grad, flexShrink: 0 }}/>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "0.92rem" }}>{ev.title}</div>
-                      <div style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: 3 }}>{ev.date} · {ev.location}</div>
+                      <div style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: 3 }}>{formatDate(ev.date)} · {ev.location}</div>
                     </div>
                     <div style={{ background: "rgba(23,136,90,.08)", color: "var(--sage)", borderRadius: 100, padding: "4px 14px", fontSize: "0.72rem", fontWeight: 700, border: "1px solid rgba(23,136,90,.2)" }}>Confirmed</div>
                   </div>
                 ))}
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* PROFILE */}
           {activeTab === "profile" && (
@@ -454,13 +640,26 @@ export default function StudentDashboard({ user, onLogout }) {
 
               <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 20, padding: 28 }}>
                 <h3 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1.1rem", marginBottom: 20 }}>Account Details</h3>
-                {[["Full Name", "Aryan Kumar"], ["Email", "aryan.kumar@student.edu"], ["Phone", "+91 9876543210"], ["Institution", "IIT (ISM) Dhanbad"], ["City", "Dhanbad, Jharkhand"]].map(([l, v]) => (
+                {[["Full Name", profile?.name || user?.name || ""], ["Email", profile?.email || user?.email || ""], ["Phone", profile?.phone || ""], ["Institution", profile?.institution || ""], ["City", profile?.city || ""]].map(([l, v]) => (
                   <div key={l} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderBottom: "1px solid var(--border)", fontSize: "0.88rem" }}>
                     <span style={{ color: "var(--muted)", fontWeight: 500 }}>{l}</span>
                     <span style={{ fontWeight: 600 }}>{v}</span>
                   </div>
                 ))}
-                <button style={{ marginTop: 24, width: "100%", padding: "12px", background: "var(--ink)", border: "none", borderRadius: 100, color: "var(--cream)", cursor: "pointer", fontWeight: 700, fontSize: "0.88rem", fontFamily: "var(--ff-body)", letterSpacing: ".02em" }}>Edit Profile →</button>
+                <button onClick={async () => {
+                    const name = prompt("Full Name:", profile?.name || "");
+                    const city = prompt("City:", profile?.city || "");
+                    const phone = prompt("Phone:", profile?.phone || "");
+                    const institution = prompt("Institution:", profile?.institution || "");
+                    if (name) {
+                      try {
+                        await authAPI.updateProfile({ name, city, phone, institution });
+                        const updated = await authAPI.me();
+                        setProfile(updated);
+                        alert("Profile updated!");
+                      } catch (err) { alert(err.message); }
+                    }
+                  }} style={{ marginTop: 24, width: "100%", padding: "12px", background: "var(--ink)", border: "none", borderRadius: 100, color: "var(--cream)", cursor: "pointer", fontWeight: 700, fontSize: "0.88rem", fontFamily: "var(--ff-body)", letterSpacing: ".02em" }}>Edit Profile →</button>
               </div>
             </div>
           )}

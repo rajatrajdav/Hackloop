@@ -1,6 +1,53 @@
 ﻿import { useState, useEffect } from "react";
 import logo from "../assets/logo.jpeg";
-import { eventsAPI, registrationsAPI, broadcastsAPI, analyticsAPI } from "../api";
+import { eventsAPI, registrationsAPI, broadcastsAPI, analyticsAPI, authAPI } from "../api";
+import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+import L from "leaflet";
+
+async function geocodeLocation(location, city) {
+  const attempts = [`${location}, ${city}, India`, `${location}, India`, `${city}, India`].filter(q => q.trim() !== ", India");
+  for (const q of attempts) {
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&countrycodes=in`, { headers: { "User-Agent": "SangamEventsApp/1.0" } });
+      const data = await res.json();
+      if (data.length > 0) return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+    } catch {}
+    await new Promise(r => setTimeout(r, 300));
+  }
+  return null;
+}
+
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+});
+
+const CITY_COORDS = {
+  "patna":     [25.5941, 85.1376],
+  "dhanbad":   [23.7957, 86.4304],
+  "ranchi":    [23.3441, 85.3096],
+  "delhi":     [28.6139, 77.2090],
+  "mumbai":    [19.0760, 72.8777],
+  "bangalore": [12.9716, 77.5946],
+  "kolkata":   [22.5726, 88.3639],
+  "hyderabad": [17.3850, 78.4867],
+  "chennai":   [13.0827, 80.2707],
+  "pune":      [18.5204, 73.8567],
+  "jaipur":    [26.9124, 75.7873],
+  "lucknow":   [26.8467, 80.9462],
+};
+
+function getCityCoords(city) {
+  if (!city) return [20.5937, 78.9629];
+  const key = city.toLowerCase().trim();
+  for (const [k, v] of Object.entries(CITY_COORDS)) {
+    if (key.includes(k)) return v;
+  }
+  return [20.5937, 78.9629];
+}
 
 const GLOBAL_CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&display=swap');
@@ -18,38 +65,37 @@ const GLOBAL_CSS = `
     --surface: #f5f3ee;
     --ff-display: 'Playfair Display', Georgia, serif;
     --ff-body: 'DM Sans', system-ui, sans-serif;
+    --shadow-sm: 0 1px 4px rgba(0,0,0,.06);
+    --shadow-md: 0 4px 20px rgba(0,0,0,.08);
+    --shadow-lg: 0 12px 40px rgba(0,0,0,.12);
+    --radius: 16px;
   }
   body { font-family: var(--ff-body); background: var(--cream); color: var(--ink); }
-  @keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
   @keyframes pulse-dot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.5; transform:scale(1.5); } }
+  .org-nav-btn:hover { background: rgba(244,160,35,.06) !important; color: var(--ink) !important; }
+  .org-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+  .org-card { transition: box-shadow .25s, transform .25s; }
+  .org-row:hover { background: #fdfcfa !important; }
+  .org-action-btn:hover { opacity: .8; transform: scale(1.08); }
+  .org-action-btn { transition: opacity .15s, transform .15s; }
+  .org-pill-btn:hover { box-shadow: 0 2px 8px rgba(0,0,0,.1); }
   ::-webkit-scrollbar { width: 5px; }
   ::-webkit-scrollbar-track { background: var(--surface); }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
   table { border-collapse: collapse; }
 `;
 
-const initialEvents = [
-  { id: 1, title: "City Marathon 2026", category: "Sports", date: "2026-04-20", time: "06:00", location: "Central Park", capacity: 200, registered: 188, status: "Active", image: "🏃", grad: "linear-gradient(135deg,#f4a023,#e85d04)", color: "#f4a023", description: "Annual city marathon open to all age groups." },
-  { id: 2, title: "Literary Festival 2026", category: "Literary", date: "2026-05-10", time: "10:00", location: "Convention Center", capacity: 500, registered: 312, status: "Active", image: "🎭", grad: "linear-gradient(135deg,#f4a023,#c97b00)", color: "#f4a023", description: "A celebration of books, authors and ideas." },
-  { id: 3, title: "Photography Meetup", category: "Hobby", date: "2026-05-02", time: "16:00", location: "Old Town Square", capacity: 40, registered: 20, status: "Draft", image: "📸", grad: "linear-gradient(135deg,#8b2fcc,#c42050)", color: "#8b2fcc", description: "Monthly photographer community meetup." },
-];
-
-const participants = [
-  { id: 1, name: "Aryan Kumar", email: "aryan@student.edu", event: "City Marathon 2026", status: "Confirmed", joined: "Apr 5" },
-  { id: 2, name: "Priya Singh", email: "priya@email.com", event: "City Marathon 2026", status: "Confirmed", joined: "Apr 6" },
-  { id: 3, name: "Rahul Mehta", email: "rahul@email.com", event: "Literary Festival 2026", status: "Waitlisted", joined: "Apr 7" },
-  { id: 4, name: "Sneha Das", email: "sneha@student.edu", event: "Literary Festival 2026", status: "Confirmed", joined: "Apr 8" },
-  { id: 5, name: "Karan Joshi", email: "karan@email.com", event: "Photography Meetup", status: "Pending", joined: "Apr 9" },
-];
-
 const categories = ["Sports", "Literary", "Hobby", "Adventure", "Music", "Tech", "Food"];
-const emptyForm = { title: "", category: "Sports", date: "", time: "", location: "", capacity: "", description: "", image: "🎉", color: "#f4a023", grad: "linear-gradient(135deg,#f4a023,#e85d04)" };
+const emptyForm = { title: "", category: "Sports", date: "", time: "", location: "", city: "", capacity: "", description: "", image: "🎉", color: "#f4a023", grad: "linear-gradient(135deg,#f4a023,#e85d04)", status: "Active" };
 
 const NAV = [
   { id: "overview", icon: "▦", label: "Overview" },
   { id: "events", icon: "◈", label: "My Events" },
   { id: "participants", icon: "◉", label: "Participants" },
   { id: "messages", icon: "◇", label: "Broadcast" },
+  { id: "map", icon: "◉", label: "Event Map" },
   { id: "analytics", icon: "✦", label: "Analytics" },
   { id: "settings", icon: "◎", label: "Settings" },
 ];
@@ -91,8 +137,14 @@ export default function OrganizerDashboard({ user, onLogout }) {
   const [msgText, setMsgText] = useState("");
   const [msgSubject, setMsgSubject] = useState("");
   const [msgType, setMsgType] = useState("Announcement");
+  const [msgEventId, setMsgEventId] = useState("");
   const [msgSent, setMsgSent] = useState(false);
+  const [msgError, setMsgError] = useState("");
+  const [msgLoading, setMsgLoading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [formError, setFormError] = useState("");
+  const [formLoading, setFormLoading] = useState(false);
+  const [eventCoords, setEventCoords] = useState({});
 
   useEffect(() => {
     if (!document.getElementById("sangam-org-css")) {
@@ -131,20 +183,32 @@ export default function OrganizerDashboard({ user, onLogout }) {
   const handleFormChange = (field, val) => setForm(f => ({ ...f, [field]: val }));
 
   const handleCreateOrEdit = async () => {
-    if (!form.title || !form.date || !form.location) return;
+    if (!form.title.trim()) { setFormError("Event title is required."); return; }
+    if (!form.date) { setFormError("Date is required."); return; }
+    if (!form.time) { setFormError("Time is required."); return; }
+    if (!form.location.trim()) { setFormError("Location is required."); return; }
+    setFormError("");
+    setFormLoading(true);
     try {
       if (editingId) {
-        await eventsAPI.update(editingId, { ...form, capacity: Number(form.capacity) });
+        await eventsAPI.update(editingId, { ...form, capacity: Number(form.capacity) || 50 });
       } else {
-        await eventsAPI.create({ ...form, capacity: Number(form.capacity) || 50 });
+        await eventsAPI.create({ ...form, capacity: Number(form.capacity) || 50, status: form.status || "Active" });
       }
-      setShowModal(false); setForm(emptyForm); setEditingId(null);
+      setShowModal(false);
+      setForm(emptyForm);
+      setEditingId(null);
+      setFormError("");
       loadData();
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      setFormError(err.message || "Failed to save event. Check backend is running.");
+    } finally {
+      setFormLoading(false);
+    }
   };
 
   const handleEdit = (event) => {
-    setForm({ title: event.title, category: event.category, date: event.date, time: event.time, location: event.location, capacity: event.capacity, description: event.description, image: event.image, color: event.color, grad: event.grad });
+    setForm({ title: event.title, category: event.category, date: event.date, time: event.time, location: event.location, city: event.city || "", capacity: event.capacity, description: event.description || "", image: event.image, color: event.color, grad: event.grad, status: event.status || "Active" });
     setEditingId(event.id); setShowModal(true);
   };
 
@@ -165,13 +229,29 @@ export default function OrganizerDashboard({ user, onLogout }) {
   };
 
   const sendMessage = async () => {
-    if (!msgSubject || !msgText) return;
+    if (!msgSubject.trim()) { setMsgError("Subject is required."); return; }
+    if (!msgText.trim()) { setMsgError("Message body is required."); return; }
+    setMsgError("");
+    setMsgLoading(true);
     try {
-      await broadcastsAPI.send({ event_id: selectedEvent?.id || null, subject: msgSubject, message: msgText, type: msgType });
-      setMsgSent(true); setTimeout(() => setMsgSent(false), 3000);
-      setMsgText(""); setMsgSubject("");
-      broadcastsAPI.getAll().then(setBroadcasts);
-    } catch (err) { console.error(err); }
+      await broadcastsAPI.send({
+        event_id: msgEventId || null,
+        subject: msgSubject.trim(),
+        message: msgText.trim(),
+        type: msgType,
+      });
+      setMsgSent(true);
+      setMsgText("");
+      setMsgSubject("");
+      setMsgEventId("");
+      setTimeout(() => setMsgSent(false), 4000);
+      const updated = await broadcastsAPI.getAll();
+      setBroadcasts(updated);
+    } catch (err) {
+      setMsgError(err.message || "Failed to send broadcast.");
+    } finally {
+      setMsgLoading(false);
+    }
   };
 
   const filtered = events.filter(e => {
@@ -180,7 +260,24 @@ export default function OrganizerDashboard({ user, onLogout }) {
     return matchStatus && matchSearch;
   });
 
-  const pageTitle = { overview: "Dashboard Overview", events: "Manage Events", participants: "Participants", messages: "Broadcast Message", analytics: "Analytics", settings: "Settings" }[activeTab];
+  // Geocode events when map tab opens
+  useEffect(() => {
+    if (activeTab !== "map" || events.length === 0) return;
+    const missing = events.filter(ev => !ev.lat || !ev.lng);
+    if (missing.length === 0) return;
+    (async () => {
+      const coords = { ...eventCoords };
+      for (const ev of missing) {
+        if (coords[ev.id]) continue;
+        const pos = await geocodeLocation(ev.location, ev.city);
+        if (pos) coords[ev.id] = pos;
+        await new Promise(r => setTimeout(r, 350));
+      }
+      setEventCoords(coords);
+    })();
+  }, [activeTab, events]);
+
+  const pageTitle = { overview: "Dashboard Overview", events: "Manage Events", participants: "Participants", messages: "Broadcast Message", map: "Event Map", analytics: "Analytics", settings: "Settings" }[activeTab];
 
   const inputStyle = { width: "100%", padding: "10px 14px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, color: "var(--ink)", fontSize: "0.88rem", outline: "none", fontFamily: "var(--ff-body)" };
   const labelStyle = { display: "block", fontSize: "0.72rem", fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 6, marginTop: 16 };
@@ -233,7 +330,7 @@ export default function OrganizerDashboard({ user, onLogout }) {
               <span style={{ fontSize: "0.8rem", color: "var(--muted)" }}>🔍</span>
               <input style={{ background: "transparent", border: "none", outline: "none", color: "var(--ink)", fontSize: "0.85rem", padding: "9px 0", width: 160, fontFamily: "var(--ff-body)" }} placeholder="Search…" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
             </div>
-            <button onClick={() => { setShowModal(true); setEditingId(null); setForm(emptyForm); }}
+            <button onClick={() => { setShowModal(true); setEditingId(null); setForm(emptyForm); setFormError(""); }}
               style={{ padding: "9px 22px", background: "var(--ink)", color: "var(--cream)", border: "none", borderRadius: 100, fontFamily: "var(--ff-body)", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer", letterSpacing: ".02em" }}>
               + Create Event
             </button>
@@ -296,7 +393,7 @@ export default function OrganizerDashboard({ user, onLogout }) {
                 <table style={{ width: "100%", fontSize: "0.85rem" }}>
                   <thead>
                     <tr>
-                      {["Name","Email","Event","Status","Joined"].map(h => (
+                      {["Name","Email","Status","Registered On"].map(h => (
                         <th key={h} style={{ textAlign: "left", padding: "13px 20px", color: "var(--muted)", fontSize: "0.7rem", fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", background: "var(--surface)", borderBottom: "1px solid var(--border)" }}>{h}</th>
                       ))}
                     </tr>
@@ -306,14 +403,13 @@ export default function OrganizerDashboard({ user, onLogout }) {
                       <tr key={p.id} style={{ borderBottom: "1px solid var(--border)" }}>
                         <td style={{ padding: "13px 20px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <div style={{ width: 30, height: 30, borderRadius: "50%", background: "linear-gradient(135deg,var(--saffron),var(--saffron-g))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.7rem", fontWeight: 800, color: "#fff", flexShrink: 0 }}>{p.name[0]}</div>
+                            <div style={{ width: 30, height: 30, borderRadius: "50%", background: "linear-gradient(135deg,var(--saffron),var(--saffron-g))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.7rem", fontWeight: 800, color: "#fff", flexShrink: 0 }}>{p.name?.[0] || "?"}</div>
                             <span style={{ fontWeight: 600 }}>{p.name}</span>
                           </div>
                         </td>
                         <td style={{ padding: "13px 20px", color: "var(--muted)" }}>{p.email}</td>
-                        <td style={{ padding: "13px 20px" }}>{p.event}</td>
                         <td style={{ padding: "13px 20px" }}><StatusPill label={p.status} /></td>
-                        <td style={{ padding: "13px 20px", color: "var(--muted)" }}>{p.joined}</td>
+                        <td style={{ padding: "13px 20px", color: "var(--muted)" }}>{p.registered_at ? new Date(p.registered_at).toLocaleDateString("en-IN") : "-"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -334,7 +430,7 @@ export default function OrganizerDashboard({ user, onLogout }) {
                     </button>
                   ))}
                 </div>
-                <button onClick={() => { setShowModal(true); setEditingId(null); setForm(emptyForm); }}
+                <button onClick={() => { setShowModal(true); setEditingId(null); setForm(emptyForm); setFormError(""); }}
                   style={{ padding: "9px 20px", background: "var(--ink)", color: "var(--cream)", border: "none", borderRadius: 100, fontFamily: "var(--ff-body)", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer" }}>+ New Event</button>
               </div>
 
@@ -384,7 +480,7 @@ export default function OrganizerDashboard({ user, onLogout }) {
                 <table style={{ width: "100%", fontSize: "0.85rem" }}>
                   <thead>
                     <tr>
-                      {["#","Participant","Email","Event","Status","Registered On","Actions"].map(h => (
+                      {["#","Participant","Email","Status","Registered On","Actions"].map(h => (
                         <th key={h} style={{ textAlign: "left", padding: "13px 20px", color: "var(--muted)", fontSize: "0.7rem", fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", background: "var(--surface)", borderBottom: "1px solid var(--border)" }}>{h}</th>
                       ))}
                     </tr>
@@ -395,18 +491,17 @@ export default function OrganizerDashboard({ user, onLogout }) {
                         <td style={{ padding: "13px 20px", color: "var(--muted)" }}>{i+1}</td>
                         <td style={{ padding: "13px 20px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <div style={{ width: 30, height: 30, borderRadius: "50%", background: "linear-gradient(135deg,var(--saffron),var(--saffron-g))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.7rem", fontWeight: 800, color: "#fff", flexShrink: 0 }}>{p.name[0]}</div>
+                            <div style={{ width: 30, height: 30, borderRadius: "50%", background: "linear-gradient(135deg,var(--saffron),var(--saffron-g))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.7rem", fontWeight: 800, color: "#fff", flexShrink: 0 }}>{p.name?.[0] || "?"}</div>
                             <span style={{ fontWeight: 600 }}>{p.name}</span>
                           </div>
                         </td>
                         <td style={{ padding: "13px 20px", color: "var(--muted)" }}>{p.email}</td>
-                        <td style={{ padding: "13px 20px" }}>{p.event}</td>
                         <td style={{ padding: "13px 20px" }}><StatusPill label={p.status} /></td>
-                        <td style={{ padding: "13px 20px", color: "var(--muted)" }}>{p.joined}</td>
+                        <td style={{ padding: "13px 20px", color: "var(--muted)" }}>{p.registered_at ? new Date(p.registered_at).toLocaleDateString("en-IN") : "-"}</td>
                         <td style={{ padding: "13px 20px" }}>
                           <div style={{ display: "flex", gap: 8 }}>
-                            <button style={{ width: 32, height: 32, background: "rgba(23,136,90,.08)", border: "1px solid rgba(23,136,90,.2)", borderRadius: 8, cursor: "pointer", fontSize: "0.85rem", display: "flex", alignItems: "center", justifyContent: "center" }}>✅</button>
-                            <button style={{ width: 32, height: 32, background: "rgba(196,32,80,.06)", border: "1px solid rgba(196,32,80,.15)", borderRadius: 8, cursor: "pointer", fontSize: "0.85rem", display: "flex", alignItems: "center", justifyContent: "center" }}>❌</button>
+                            <button onClick={() => registrationsAPI.updateStatus(selectedEvent?.id, p.id, "Confirmed").then(() => registrationsAPI.getParticipants(selectedEvent?.id).then(setParticipants))} style={{ width: 32, height: 32, background: "rgba(23,136,90,.08)", border: "1px solid rgba(23,136,90,.2)", borderRadius: 8, cursor: "pointer", fontSize: "0.85rem", display: "flex", alignItems: "center", justifyContent: "center" }}>✅</button>
+                            <button onClick={() => registrationsAPI.updateStatus(selectedEvent?.id, p.id, "Cancelled").then(() => registrationsAPI.getParticipants(selectedEvent?.id).then(setParticipants))} style={{ width: 32, height: 32, background: "rgba(196,32,80,.06)", border: "1px solid rgba(196,32,80,.15)", borderRadius: 8, cursor: "pointer", fontSize: "0.85rem", display: "flex", alignItems: "center", justifyContent: "center" }}>❌</button>
                           </div>
                         </td>
                       </tr>
@@ -425,45 +520,173 @@ export default function OrganizerDashboard({ user, onLogout }) {
                 <p style={{ color: "var(--muted)", fontSize: "0.82rem", marginBottom: 22 }}>Send announcements, updates, or reminders to registered participants.</p>
 
                 <label style={labelStyle}>Select Event</label>
-                <select style={inputStyle}>
+                <select
+                  style={inputStyle}
+                  value={msgEventId}
+                  onChange={e => setMsgEventId(e.target.value)}
+                >
                   <option value="">All Events</option>
                   {events.map(e => <option key={e.id} value={e.id}>{e.title}</option>)}
                 </select>
 
                 <label style={labelStyle}>Message Type</label>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
-                  {["Announcement","Reminder","Update","Cancellation"].map(t => (
-                    <button key={t} onClick={() => setMsgType(t)} style={{ padding: "7px 16px", borderRadius: 100, border: "1px solid var(--border)", background: msgType === t ? "var(--ink)" : "#fff", color: msgType === t ? "var(--cream)" : "var(--muted)", cursor: "pointer", fontSize: "0.78rem", fontFamily: "var(--ff-body)", fontWeight: 600, transition: "all .2s" }}>{t}</button>
+                  {["Announcement", "Reminder", "Update", "Cancellation"].map(t => (
+                    <button
+                      key={t}
+                      onClick={() => setMsgType(t)}
+                      style={{
+                        padding: "7px 16px", borderRadius: 100,
+                        border: msgType === t ? "none" : "1px solid var(--border)",
+                        background: msgType === t ? "var(--ink)" : "#fff",
+                        color: msgType === t ? "var(--cream)" : "var(--muted)",
+                        cursor: "pointer", fontSize: "0.78rem",
+                        fontFamily: "var(--ff-body)", fontWeight: 600, transition: "all .2s",
+                      }}
+                    >{t}</button>
                   ))}
                 </div>
 
-                <label style={labelStyle}>Subject</label>
-                <input style={inputStyle} placeholder="Message subject…" value={msgSubject} onChange={e => setMsgSubject(e.target.value)} />
+                <label style={labelStyle}>Subject *</label>
+                <input
+                  style={{ ...inputStyle, border: msgError && !msgSubject.trim() ? "1.5px solid #c42050" : inputStyle.border }}
+                  placeholder="e.g. Important update about the event"
+                  value={msgSubject}
+                  onChange={e => { setMsgSubject(e.target.value); setMsgError(""); }}
+                />
 
-                <label style={labelStyle}>Message</label>
-                <textarea style={{ ...inputStyle, height: 120, resize: "vertical" }} placeholder="Write your message to participants…" value={msgText} onChange={e => setMsgText(e.target.value)} />
+                <label style={labelStyle}>Message *</label>
+                <textarea
+                  style={{
+                    ...inputStyle, height: 130, resize: "vertical",
+                    border: msgError && !msgText.trim() ? "1.5px solid #c42050" : inputStyle.border,
+                  }}
+                  placeholder="Write your message to participants…"
+                  value={msgText}
+                  onChange={e => { setMsgText(e.target.value); setMsgError(""); }}
+                />
 
-                <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-                  <button onClick={sendMessage} style={{ padding: "11px 26px", background: "var(--ink)", color: "var(--cream)", border: "none", borderRadius: 100, fontFamily: "var(--ff-body)", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer" }}>
-                    {msgSent ? "✓ Sent!" : "📤 Send Broadcast"}
+                {msgError && (
+                  <div style={{ marginTop: 10, padding: "10px 16px", background: "rgba(196,32,80,.06)", border: "1px solid rgba(196,32,80,.2)", borderRadius: 10, color: "#c42050", fontSize: "0.82rem" }}>
+                    ⚠️ {msgError}
+                  </div>
+                )}
+
+                {msgSent && (
+                  <div style={{ marginTop: 10, padding: "10px 16px", background: "rgba(23,136,90,.08)", border: "1px solid rgba(23,136,90,.2)", borderRadius: 10, color: "var(--sage)", fontSize: "0.82rem" }}>
+                    ✅ Broadcast sent successfully!
+                  </div>
+                )}
+
+                <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+                  <button
+                    onClick={sendMessage}
+                    disabled={msgLoading}
+                    style={{
+                      padding: "11px 26px", background: msgLoading ? "var(--muted)" : "var(--ink)",
+                      color: "var(--cream)", border: "none", borderRadius: 100,
+                      fontFamily: "var(--ff-body)", fontWeight: 700, fontSize: "0.85rem",
+                      cursor: msgLoading ? "not-allowed" : "pointer", transition: "background .2s",
+                    }}
+                  >
+                    {msgLoading ? "Sending…" : "📤 Send Broadcast"}
                   </button>
-                  <button style={{ padding: "11px 20px", background: "transparent", border: "1px solid var(--border)", borderRadius: 100, color: "var(--muted)", cursor: "pointer", fontSize: "0.85rem", fontFamily: "var(--ff-body)" }}>🕒 Schedule</button>
+                  <button
+                    onClick={() => { setMsgSubject(""); setMsgText(""); setMsgEventId(""); setMsgType("Announcement"); setMsgError(""); setMsgSent(false); }}
+                    style={{
+                      padding: "11px 20px", background: "transparent",
+                      border: "1px solid var(--border)", borderRadius: 100,
+                      color: "var(--muted)", cursor: "pointer", fontSize: "0.85rem",
+                      fontFamily: "var(--ff-body)",
+                    }}
+                  >🗑 Clear</button>
                 </div>
-                {msgSent && <div style={{ marginTop: 14, padding: "10px 18px", background: "rgba(23,136,90,.08)", color: "var(--sage)", borderRadius: 12, fontSize: "0.82rem", border: "1px solid rgba(23,136,90,.2)" }}>✅ Message sent to all participants!</div>}
               </div>
 
-              <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 20, padding: 24 }}>
+              <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 20, padding: 24, overflowY: "auto", maxHeight: 600 }}>
                 <h3 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1rem", marginBottom: 18 }}>Message History</h3>
-                {broadcasts.map((m, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 0", borderBottom: "1px solid var(--border)" }}>
-                    <div style={{ width: 38, height: 38, borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1rem" }}>📨</div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: "0.85rem", fontWeight: 600 }}>{m.subject}</div>
-                      <div style={{ fontSize: "0.72rem", color: "var(--muted)" }}>{m.event_title || "All Events"} · {new Date(m.sent_at).toLocaleDateString()}</div>
+                {broadcasts.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "40px 0", color: "var(--muted)" }}>
+                    <div style={{ fontSize: "2rem", marginBottom: 8 }}>📭</div>
+                    <p style={{ fontSize: "0.82rem" }}>No broadcasts sent yet.</p>
+                  </div>
+                ) : broadcasts.map((m, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "13px 0", borderBottom: "1px solid var(--border)" }}>
+                    <div style={{ width: 38, height: 38, borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1rem", flexShrink: 0 }}>📨</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: "0.85rem", fontWeight: 600, marginBottom: 2 }}>{m.subject}</div>
+                      <div style={{ fontSize: "0.72rem", color: "var(--muted)", marginBottom: 4 }}>
+                        {m.event_title || "All Events"} · {new Date(m.sent_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                      </div>
+                      <div style={{ display: "inline-block", background: "rgba(61,59,245,.06)", color: "var(--indigo)", borderRadius: 100, padding: "2px 10px", fontSize: "0.68rem", fontWeight: 700 }}>{m.type}</div>
                     </div>
-                    <div style={{ fontSize: "0.72rem", color: "var(--muted)" }}>{m.type}</div>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* MAP */}
+          {activeTab === "map" && (
+            <div style={{ animation: "fadeUp .5s ease both" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20 }}>
+                <div style={{ borderRadius: 20, overflow: "hidden", height: 500, border: "1px solid var(--border)", boxShadow: "0 4px 24px rgba(0,0,0,.08)" }}>
+                  <MapContainer
+                    center={getCityCoords(user?.city)}
+                    zoom={user?.city ? 13 : 5}
+                    style={{ height: "100%", width: "100%" }}
+                    scrollWheelZoom={true}
+                  >
+                    <TileLayer
+                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    />
+                    {events.map(ev => {
+                      const pos = (ev.lat && ev.lng)
+                        ? [parseFloat(ev.lat), parseFloat(ev.lng)]
+                        : eventCoords[ev.id] || null;
+                      if (!pos) return null;
+                      return (
+                        <Marker key={ev.id} position={pos}>
+                          <Popup>
+                            <div style={{ fontFamily: "sans-serif", minWidth: 180 }}>
+                              <div style={{ fontSize: "1.3rem", marginBottom: 4 }}>{ev.image}</div>
+                              <div style={{ fontWeight: 700, fontSize: "0.88rem", marginBottom: 4 }}>{ev.title}</div>
+                              <div style={{ fontSize: "0.75rem", color: "#555" }}>📅 {ev.date} · {ev.time?.slice(0,5)}</div>
+                              <div style={{ fontSize: "0.75rem", color: "#555" }}>📍 {ev.location}{ev.city ? `, ${ev.city}` : ""}</div>
+                              <div style={{ fontSize: "0.75rem", fontWeight: 600, marginTop: 4, color: "#17885a" }}>
+                                👥 {ev.registered}/{ev.capacity} registered
+                              </div>
+                            </div>
+                          </Popup>
+                        </Marker>
+                      );
+                    })}
+                  </MapContainer>
+                </div>
+
+                <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 20, padding: 22, overflowY: "auto", height: 500 }}>
+                  <h3 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1rem", marginBottom: 4 }}>Your Events</h3>
+                  <p style={{ fontSize: "0.72rem", color: "var(--muted)", marginBottom: events.some(ev => !ev.lat && !ev.lng && !eventCoords[ev.id]) ? 6 : 16 }}>Pinned on the map by exact location</p>
+                  {events.some(ev => !ev.lat && !ev.lng && !eventCoords[ev.id]) && (
+                    <div style={{ fontSize: "0.7rem", color: "var(--muted)", marginBottom: 12, padding: "6px 10px", background: "var(--surface)", borderRadius: 8 }}>📡 Locating events on map…</div>
+                  )}
+                  {events.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "40px 0", color: "var(--muted)" }}>
+                      <div style={{ fontSize: "2rem", marginBottom: 8 }}>🗺️</div>
+                      <p style={{ fontSize: "0.82rem" }}>No events yet. Create one to see it on the map.</p>
+                    </div>
+                  ) : events.map(ev => (
+                    <div key={ev.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 0", borderBottom: "1px solid var(--border)" }}>
+                      <div style={{ width: 38, height: 38, borderRadius: 10, background: ev.grad, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1rem", flexShrink: 0 }}>{ev.image}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: "0.82rem", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ev.title}</div>
+                        <div style={{ fontSize: "0.7rem", color: "var(--muted)", marginTop: 2 }}>📍 {ev.location}{ev.city ? `, ${ev.city}` : ""}</div>
+                      </div>
+                      <StatusPill label={ev.status} />
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}
@@ -473,10 +696,10 @@ export default function OrganizerDashboard({ user, onLogout }) {
             <div style={{ animation: "fadeUp .5s ease both" }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 32 }}>
                 {[
-                  { label: "Total Views", value: "2,847", color: "var(--indigo)" },
-                  { label: "Conversion Rate", value: "34%", color: "var(--sage)" },
-                  { label: "Avg. Fill Rate", value: "78%", color: "var(--saffron)" },
-                  { label: "Repeat Attendees", value: "41%", color: "#8b2fcc" },
+                  { label: "Total Events",     value: analytics?.totalEvents ?? events.length,     color: "var(--saffron)" },
+                  { label: "Total Registered", value: analytics?.totalRegistered ?? totalRegistered, color: "var(--sage)" },
+                  { label: "Avg. Fill Rate",   value: analytics?.fillRate ?? (totalCapacity > 0 ? Math.round((totalRegistered/totalCapacity)*100)+'%' : '0%'), color: "var(--indigo)" },
+                  { label: "Active Events",    value: analytics?.activeEvents ?? events.filter(e=>e.status==="Active").length, color: "#8b2fcc" },
                 ].map((s, i) => (
                   <div key={i} style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 16, padding: "20px 22px", borderTop: `3px solid ${s.color}` }}>
                     <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 8 }}>{s.label}</div>
@@ -518,14 +741,29 @@ export default function OrganizerDashboard({ user, onLogout }) {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, animation: "fadeUp .5s ease both" }}>
               <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 20, padding: 28 }}>
                 <h3 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1.1rem", marginBottom: 20 }}>Organizer Profile</h3>
-                <div style={{ width: 72, height: 72, borderRadius: "50%", background: "linear-gradient(135deg,#f4a023,#e85d04)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.4rem", fontWeight: 900, color: "#fff", margin: "0 auto 24px" }}>RS</div>
-                {[["Full Name","Rohit Sharma"],["Email","rohit.sharma@organizer.com"],["Phone","+91 9876543210"],["Organization","CommuniHub Events"],["City","Dhanbad, Jharkhand"]].map(([l, v]) => (
+                <div style={{ width: 72, height: 72, borderRadius: "50%", background: "linear-gradient(135deg,#f4a023,#e85d04)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.4rem", fontWeight: 900, color: "#fff", margin: "0 auto 24px" }}>{user?.name?.[0] || "O"}</div>
+                {[["Full Name", "name", user?.name || ""],["Email", "email", user?.email || ""],["Phone", "phone", ""],["Organization", "institution", ""],["City", "city", ""]].map(([l, field, defaultVal]) => (
                   <div key={l} style={{ marginBottom: 14 }}>
                     <label style={labelStyle}>{l}</label>
-                    <input style={inputStyle} defaultValue={v} />
+                    <input
+                      id={`settings-${field}`}
+                      style={inputStyle}
+                      defaultValue={defaultVal}
+                      readOnly={field === "email"}
+                    />
                   </div>
                 ))}
-                <button style={{ marginTop: 6, width: "100%", padding: "11px", background: "var(--ink)", border: "none", borderRadius: 100, color: "var(--cream)", cursor: "pointer", fontWeight: 700, fontSize: "0.88rem", fontFamily: "var(--ff-body)" }}>Save Changes →</button>
+                <button onClick={async () => {
+                  try {
+                    await authAPI.updateProfile({
+                      name: document.getElementById("settings-name")?.value,
+                      phone: document.getElementById("settings-phone")?.value,
+                      institution: document.getElementById("settings-institution")?.value,
+                      city: document.getElementById("settings-city")?.value,
+                    });
+                    alert("Profile saved!");
+                  } catch (err) { alert(err.message); }
+                }} style={{ marginTop: 6, width: "100%", padding: "11px", background: "var(--ink)", border: "none", borderRadius: 100, color: "var(--cream)", cursor: "pointer", fontWeight: 700, fontSize: "0.88rem", fontFamily: "var(--ff-body)" }}>Save Changes →</button>
               </div>
 
               <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 20, padding: 28 }}>
@@ -553,7 +791,7 @@ export default function OrganizerDashboard({ user, onLogout }) {
             style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 24, width: "90%", maxWidth: 580, maxHeight: "90vh", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 32px 80px rgba(0,0,0,.2)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "22px 28px", borderBottom: "1px solid var(--border)" }}>
               <h2 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1.2rem" }}>{editingId ? "Edit Event" : "Create New Event"}</h2>
-              <button onClick={() => setShowModal(false)} style={{ background: "transparent", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: "1.1rem", width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+              <button onClick={() => { setShowModal(false); setFormError(""); }} style={{ background: "transparent", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: "1.1rem", width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
             </div>
             <div style={{ padding: "6px 28px 20px", overflowY: "auto", flex: 1 }}>
               <div style={{ display: "flex", gap: 12 }}>
@@ -583,9 +821,29 @@ export default function OrganizerDashboard({ user, onLogout }) {
                 </div>
               </div>
               <label style={labelStyle}>Location *</label>
-              <input style={inputStyle} placeholder="Venue / Address" value={form.location} onChange={e => handleFormChange("location", e.target.value)} />
+              <input style={inputStyle} placeholder="Venue / Address e.g. Gandhi Maidan" value={form.location} onChange={e => handleFormChange("location", e.target.value)} />
+              <label style={labelStyle}>City *</label>
+              <input style={inputStyle} placeholder="e.g. Patna" value={form.city || ""} onChange={e => handleFormChange("city", e.target.value)} />
               <label style={labelStyle}>Description</label>
               <textarea style={{ ...inputStyle, height: 72, resize: "vertical" }} placeholder="Brief description…" value={form.description} onChange={e => handleFormChange("description", e.target.value)} />
+
+              {/* Publish toggle */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 20, padding: "14px 16px", background: form.status === "Active" ? "rgba(23,136,90,.06)" : "rgba(61,59,245,.04)", borderRadius: 12, border: `1px solid ${form.status === "Active" ? "rgba(23,136,90,.2)" : "var(--border)"}` }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: "0.88rem" }}>
+                    {form.status === "Active" ? "🟢 Publish to Student Feed" : "⚪ Save as Draft"}
+                  </div>
+                  <div style={{ fontSize: "0.72rem", color: "var(--muted)", marginTop: 2 }}>
+                    {form.status === "Active" ? "Students can see and register for this event" : "Only visible to you, not shown to students"}
+                  </div>
+                </div>
+                <div
+                  onClick={() => handleFormChange("status", form.status === "Active" ? "Draft" : "Active")}
+                  style={{ width: 48, height: 26, borderRadius: 13, background: form.status === "Active" ? "#17885a" : "var(--border)", position: "relative", cursor: "pointer", transition: "background .25s", flexShrink: 0 }}
+                >
+                  <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", position: "absolute", top: 3, left: form.status === "Active" ? 25 : 3, transition: "left .25s", boxShadow: "0 1px 4px rgba(0,0,0,.2)" }} />
+                </div>
+              </div>
               <div style={{ display: "flex", gap: 24 }}>
                 <div>
                   <label style={labelStyle}>Event Icon</label>
@@ -609,9 +867,18 @@ export default function OrganizerDashboard({ user, onLogout }) {
                 </div>
               </div>
             </div>
-            <div style={{ display: "flex", gap: 10, padding: "18px 28px", borderTop: "1px solid var(--border)", justifyContent: "flex-end" }}>
-              <button onClick={() => setShowModal(false)} style={{ padding: "10px 22px", background: "transparent", border: "1px solid var(--border)", borderRadius: 100, color: "var(--muted)", cursor: "pointer", fontSize: "0.85rem", fontFamily: "var(--ff-body)" }}>Cancel</button>
-              <button onClick={handleCreateOrEdit} style={{ padding: "10px 26px", background: "var(--ink)", border: "none", borderRadius: 100, color: "var(--cream)", cursor: "pointer", fontWeight: 700, fontSize: "0.85rem", fontFamily: "var(--ff-body)" }}>{editingId ? "Save Changes" : "Create Event →"}</button>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "18px 28px", borderTop: "1px solid var(--border)" }}>
+              {formError && (
+                <div style={{ padding: "10px 14px", background: "rgba(196,32,80,.06)", border: "1px solid rgba(196,32,80,.2)", borderRadius: 10, color: "#c42050", fontSize: "0.82rem" }}>
+                  ⚠️ {formError}
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                <button onClick={() => { setShowModal(false); setFormError(""); }} style={{ padding: "10px 22px", background: "transparent", border: "1px solid var(--border)", borderRadius: 100, color: "var(--muted)", cursor: "pointer", fontSize: "0.85rem", fontFamily: "var(--ff-body)" }}>Cancel</button>
+                <button onClick={handleCreateOrEdit} disabled={formLoading} style={{ padding: "10px 26px", background: formLoading ? "var(--muted)" : "var(--ink)", border: "none", borderRadius: 100, color: "var(--cream)", cursor: formLoading ? "not-allowed" : "pointer", fontWeight: 700, fontSize: "0.85rem", fontFamily: "var(--ff-body)", transition: "background .2s" }}>
+                  {formLoading ? "Saving…" : editingId ? "Save Changes" : "Create Event →"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

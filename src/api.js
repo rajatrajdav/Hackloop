@@ -9,8 +9,9 @@ const headers = (auth = false) => ({
 
 const handleRes = async (res) => {
   const text = await res.text();
-  const data = text ? JSON.parse(text) : {};
-  if (!res.ok) throw new Error(data.message || "Something went wrong");
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch { data = {}; }
+  if (!res.ok) throw new Error(data.message || `Error ${res.status}`);
   return data;
 };
 
@@ -59,6 +60,17 @@ export const eventsAPI = {
       headers: headers(true),
     }).then(handleRes);
   },
+
+  getNearby: (city) =>
+    fetch(`${BASE_URL}/events/nearby?city=${encodeURIComponent(city || "")}`, {
+      headers: headers(true),
+    }).then(handleRes),
+
+  regeocode: () =>
+    fetch(`${BASE_URL}/events/regeocode`, {
+      method: "POST",
+      headers: headers(true),
+    }).then(handleRes),
 
   create: (data) =>
     fetch(`${BASE_URL}/events`, {
