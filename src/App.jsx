@@ -7,16 +7,17 @@ import OrganizerDashboard from "./pages/organizersdashboard";
 
 export default function App() {
   const [page, setPage] = useState("landing");
-  const [userName, setUserName] = useState("");
+  const [user, setUser] = useState(null);
 
-  const handleLogin = (role, name) => {
-    setUserName(name);
+  const handleLogin = (role, name, userData) => {
+    setUser(userData || { role, name });
     setPage(role);
   };
 
   const handleLogout = () => {
+    localStorage.removeItem("token");
     setPage("landing");
-    setUserName("");
+    setUser(null);
   };
 
   return (
@@ -28,10 +29,10 @@ export default function App() {
         <Login key="login" onLogin={handleLogin} onBack={() => setPage("landing")} />
       )}
       {page === "student" && (
-        <StudentDashboard key="student" onLogout={handleLogout} userName={userName} />
+        <StudentDashboard key="student" onLogout={handleLogout} user={user} />
       )}
       {page === "organizer" && (
-        <OrganizerDashboard key="organizer" onLogout={handleLogout} userName={userName} />
+        <OrganizerDashboard key="organizer" onLogout={handleLogout} user={user} />
       )}
     </AnimatePresence>
   );

@@ -1,4 +1,10 @@
 import { useState, useEffect, useRef } from "react";
+import logo from "../assets/logo.jpeg";
+import bgVideo from "../assets/background.mp4";
+import sportsBg from "../assets/sports.jpg";
+import wellnessBg from "../assets/Feel Better_ Live Better_.jpg";
+import artistBg from "../assets/Artist Illustrates How Doing Anything Is Much Better When There Are Animals Around (29 Pics).jpg";
+import litBg from "../assets/download.jpg";
 
 /* ─── Keyframe styles injected once ─── */
 const GLOBAL_CSS = `
@@ -88,10 +94,10 @@ const GLOBAL_CSS = `
 
 /* ─── Data ─── */
 const SLIDES = [
-  { emoji: "🏃", label: "Sports", title: "Ganga Sunrise\nMarathon 2026", grad: "linear-gradient(135deg,#f4a023,#e85d04)", color: "#f4a023" },
-  { emoji: "📖", label: "Literature", title: "Hindi Lit Fest\nSpoken Word Eve", grad: "linear-gradient(135deg,#3d3bf5,#8b2fcc)", color: "#8b2fcc" },
-  { emoji: "🧘", label: "Wellness", title: "Open Yoga at\nRiver Bank", grad: "linear-gradient(135deg,#17885a,#0d5c3a)", color: "#17885a" },
-  { emoji: "🎨", label: "Creative", title: "Art Jam &\nOpen Studio Night", grad: "linear-gradient(135deg,#f03e6e,#8b0f3a)", color: "#f03e6e" },
+  { emoji: "🏃", label: "Sports", title: "Ganga Sunrise\nMarathon 2026", grad: "linear-gradient(135deg,#f4a023,#e85d04)", color: "#f4a023", bg: sportsBg },
+  { emoji: "📖", label: "Literature", title: "Hindi Lit Fest\nSpoken Word Eve", grad: "linear-gradient(135deg,#3d3bf5,#8b2fcc)", color: "#8b2fcc", bg: litBg },
+  { emoji: "🧘", label: "Wellness", title: "Open Yoga at\nRiver Bank", grad: "linear-gradient(135deg,#17885a,#0d5c3a)", color: "#17885a", bg: wellnessBg },
+  { emoji: "🎨", label: "Creative", title: "Art Jam &\nOpen Studio Night", grad: "linear-gradient(135deg,#f03e6e,#8b0f3a)", color: "#f03e6e", bg: artistBg },
 ];
 
 const CATEGORIES = [
@@ -302,13 +308,43 @@ function StepCard({ num, title, desc, index }) {
   );
 }
 
+function SectionHeader({ children }) {
+  const [ref, vis] = useReveal();
+  return <div ref={ref} style={{ opacity: vis?1:0, transform: vis?"none":"translateY(24px)", transition:"all .7s ease" }}>{children}</div>;
+}
+
+function SectionHeaderDark({ children }) {
+  const [ref, vis] = useReveal();
+  return <div ref={ref} style={{ opacity: vis?1:0, transform: vis?"none":"translateY(24px)", transition:"all .7s" }}>{children}</div>;
+}
+
+function RevealSection({ children, style }) {
+  const [ref, vis] = useReveal();
+  return <section ref={ref} style={{ ...style, opacity: vis?1:0, transform: vis?"none":"translateY(28px)", transition:"all .9s ease" }}>{children}</section>;
+}
+
+function RevealDiv({ children, style }) {
+  const [ref, vis] = useReveal();
+  return <div ref={ref} style={{ ...style, opacity: vis?1:0, transform: vis?"none":"translateY(28px)", transition:"all .8s ease" }}>{children}</div>;
+}
+
+function HowHeader() {
+  const [ref, vis] = useReveal();
+  return (
+    <div ref={ref} style={{ textAlign:"center", opacity: vis?1:0, transform: vis?"none":"translateY(24px)", transition:"all .7s", marginBottom:60 }}>
+      <div style={{ fontSize:"0.7rem", fontWeight:700, letterSpacing:".12em", textTransform:"uppercase", color:"var(--muted)", marginBottom:12 }}>Simple as it gets</div>
+      <h2 style={{ fontFamily:"var(--ff-display)", fontSize:"clamp(2rem,4vw,3rem)", fontWeight:900, marginBottom:10 }}>Three Steps to Your People</h2>
+      <p style={{ color:"var(--muted)", maxWidth:420, margin:"0 auto" }}>No complicated setup. Find, join, show up.</p>
+    </div>
+  );
+}
+
 /* ─── Main Component ─── */
 export default function Landing({ onLoginClick }) {
   const [slide, setSlide] = useState(0);
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState(null);
   const [navScrolled, setNavScrolled] = useState(false);
-  const [mobileMenu, setMobileMenu] = useState(false);
   const [heroMounted, setHeroMounted] = useState(false);
 
   const showToast = (msg) => setToast(msg);
@@ -356,15 +392,17 @@ export default function Landing({ onLoginClick }) {
         boxShadow: navScrolled ? "0 4px 24px rgba(0,0,0,.06)" : "none",
         transition:"all .3s ease",
       }}>
-        <a href="#" style={{ fontFamily:"var(--ff-display)", fontSize:"1.6rem", fontWeight:900, color:"var(--ink)", textDecoration:"none", display:"flex", alignItems:"center", gap:4 }}>
-          Sangam<span style={{ color:"var(--saffron)" }}>.</span>
+        <a href="#" style={{ textDecoration:"none", display:"flex", alignItems:"center" }}>
+          <div style={{ width:160, height:56, borderRadius:10, overflow:"hidden", flexShrink:0 }}>
+            <img src={logo} alt="Sangam" style={{ width:"100%", height:"100%", objectFit:"cover", objectPosition:"center" }} />
+          </div>
         </a>
 
         <div style={{ display:"flex", gap:32, listStyle:"none" }}>
           {["Find Events","How it Works","Communities","Create"].map(l => (
-            <a key={l} href="#" style={{ textDecoration:"none", color:"var(--muted)", fontWeight:500, fontSize:"0.88rem", transition:"color .2s" }}
-              onMouseEnter={e => e.target.style.color="var(--ink)"}
-              onMouseLeave={e => e.target.style.color="var(--muted)"}
+            <a key={l} href="#" style={{ textDecoration:"none", color:"#3d3bf5", fontWeight:600, fontSize:"0.88rem", transition:"color .2s" }}
+              onMouseEnter={e => e.target.style.color="#f4a023"}
+              onMouseLeave={e => e.target.style.color="#3d3bf5"}
             >{l}</a>
           ))}
         </div>
@@ -390,10 +428,18 @@ export default function Landing({ onLoginClick }) {
       </nav>
 
       {/* ── HERO ── */}
-      <section style={{ display:"grid", gridTemplateColumns:"1fr 1fr", minHeight:"92vh", overflow:"hidden" }}>
+      <section style={{ display:"grid", gridTemplateColumns:"1.4fr 0.6fr", minHeight:"92vh", overflow:"hidden", position:"relative" }}>
+
+        {/* Background Video */}
+        <video autoPlay muted loop playsInline style={{
+          position:"absolute", inset:0, width:"100%", height:"100%",
+          objectFit:"cover", zIndex:0, opacity:0.55,
+        }}>
+          <source src={bgVideo} type="video/mp4" />
+        </video>
 
         {/* Left */}
-        <div style={{ padding:"80px 64px", display:"flex", flexDirection:"column", justifyContent:"center", position:"relative" }}>
+        <div style={{ padding:"80px 64px", display:"flex", flexDirection:"column", justifyContent:"center", position:"relative", zIndex:1 }}>
 
           {/* Floating badge */}
           <div style={{
@@ -432,13 +478,15 @@ export default function Landing({ onLoginClick }) {
             marginBottom:24,
             opacity: heroMounted ? 1 : 0,
             animation: heroMounted ? "fadeUp .8s ease .2s both" : "none",
+            background:"linear-gradient(135deg,#1a1a2e 0%,#f4a023 50%,#f03e6e 100%)",
+            WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent",
           }}>
             Where Interests<br />
             Root &amp;{" "}
             <em style={{
-              fontStyle:"italic", color:"var(--indigo)",
-              background:"linear-gradient(90deg,var(--indigo),#8b2fcc,var(--indigo))",
-              backgroundSize:"200% auto",
+              fontStyle:"italic",
+              background:"linear-gradient(90deg,#3d3bf5,#f03e6e,#f4a023,#3d3bf5)",
+              backgroundSize:"300% auto",
               WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent",
               animation:"shimmer 4s linear infinite",
             }}>Communities</em><br />
@@ -446,10 +494,11 @@ export default function Landing({ onLoginClick }) {
           </h1>
 
           <p style={{
-            fontSize:"1.05rem", color:"var(--muted)", lineHeight:1.75,
+            fontSize:"1.05rem", color:"#4a4a6a", lineHeight:1.75,
             maxWidth:440, marginBottom:36,
             opacity: heroMounted ? 1 : 0,
             animation: heroMounted ? "fadeUp .8s ease .35s both" : "none",
+            fontWeight: 500,
           }}>
             Stop scrolling, start meeting. From sunrise marathons to late-night book clubs — find your people, right around the corner.
           </p>
@@ -497,12 +546,12 @@ export default function Landing({ onLoginClick }) {
             opacity: heroMounted ? 1 : 0,
             animation: heroMounted ? "fadeUp .8s ease .65s both" : "none",
           }}>
-            {[["12K+","Events this month"],["840+","Communities"],["2.4L","Members joined"]].map(([n,l], i) => (
+            {[["12K+","Events this month","#f4a023"],["840+","Communities","#3d3bf5"],["2.4L","Members joined","#f03e6e"]].map(([n,l,c], i) => (
               <div key={i} style={{ display:"flex", alignItems:"center", gap:i > 0 ? 28 : 0 }}>
                 {i > 0 && <div style={{ width:1, height:36, background:"var(--border)" }}/>}
                 <div>
-                  <div style={{ fontFamily:"var(--ff-display)", fontSize:"1.7rem", fontWeight:700 }}>{n}</div>
-                  <div style={{ fontSize:"0.75rem", color:"var(--muted)", fontWeight:500 }}>{l}</div>
+                  <div style={{ fontFamily:"var(--ff-display)", fontSize:"1.7rem", fontWeight:700, color:c }}>{n}</div>
+                  <div style={{ fontSize:"0.75rem", color:"#6b6b8a", fontWeight:600 }}>{l}</div>
                 </div>
               </div>
             ))}
@@ -510,7 +559,7 @@ export default function Landing({ onLoginClick }) {
         </div>
 
         {/* Right – Slideshow */}
-        <div style={{ position:"relative", overflow:"hidden" }}>
+        <div style={{ position:"relative", overflow:"hidden", zIndex:1, margin:"24px 24px 24px 0", borderRadius:24 }}>
           {/* Animated bg orbs */}
           <div style={{
             position:"absolute", top:"20%", left:"30%",
@@ -534,13 +583,15 @@ export default function Landing({ onLoginClick }) {
           {SLIDES.map((s, i) => (
             <div key={i} style={{
               position:"absolute", inset:0,
-              background: s.grad,
               opacity: i === slide ? 1 : 0,
               transition:"opacity 1.2s cubic-bezier(.4,0,.2,1)",
-              display:"flex", alignItems:"center", justifyContent:"center",
-              fontSize:"10rem",
               zIndex:1,
-            }}>{s.emoji}</div>
+            }}>
+              {s.bg
+                ? <img src={s.bg} alt={s.label} style={{ width:"100%", height:"100%", objectFit:"cover", objectPosition:"center", display:"block" }} />
+                : <div style={{ width:"100%", height:"100%", background: s.grad, display:"flex", alignItems:"center", justifyContent:"center", fontSize:"10rem" }}>{s.emoji}</div>
+              }
+            </div>
           ))}
 
           {/* Overlay */}
@@ -603,18 +654,16 @@ export default function Landing({ onLoginClick }) {
 
       {/* ── CATEGORIES ── */}
       <section id="discover" style={{ padding:"96px 64px", maxWidth:1280, margin:"0 auto" }}>
-        {(() => { const [ref, vis] = useReveal(); return (
-          <div ref={ref} style={{ opacity: vis?1:0, transform: vis?"none":"translateY(24px)", transition:"all .7s ease", display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:52 }}>
+        <RevealDiv style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:52 }}>
             <div>
-              <div style={{ fontSize:"0.7rem", fontWeight:700, letterSpacing:".12em", textTransform:"uppercase", color:"var(--muted)", marginBottom:12 }}>Browse by interest</div>
-              <h2 style={{ fontFamily:"var(--ff-display)", fontSize:"clamp(2rem,4vw,3rem)", fontWeight:900, lineHeight:1.1, marginBottom:10 }}>Discover Your Vibe</h2>
-              <p style={{ color:"var(--muted)", fontSize:"1rem" }}>Pick a category and see what's happening today.</p>
+              <div style={{ fontSize:"0.7rem", fontWeight:700, letterSpacing:".12em", textTransform:"uppercase", color:"#f4a023", marginBottom:12 }}>Browse by interest</div>
+              <h2 style={{ fontFamily:"var(--ff-display)", fontSize:"clamp(2rem,4vw,3rem)", fontWeight:900, lineHeight:1.1, marginBottom:10, background:"linear-gradient(135deg,#0c0c14,#3d3bf5)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>Discover Your Vibe</h2>
+              <p style={{ color:"#6b6b8a", fontSize:"1rem", fontWeight:500 }}>Pick a category and see what's happening today.</p>
             </div>
             <a onClick={() => showToast("Loading all categories…")} style={{ display:"flex", alignItems:"center", gap:6, fontWeight:700, fontSize:"0.88rem", color:"var(--indigo)", cursor:"pointer", whiteSpace:"nowrap" }}>
               See all →
             </a>
-          </div>
-        ); })()}
+        </RevealDiv>
 
         <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:20 }}>
           {CATEGORIES.map((cat, i) => <CategoryCard key={cat.name} cat={cat} index={i} onToast={showToast} />)}
@@ -624,16 +673,14 @@ export default function Landing({ onLoginClick }) {
       {/* ── EVENTS ── */}
       <section style={{ background:"var(--ink)", padding:"96px 0" }}>
         <div style={{ maxWidth:1280, margin:"0 auto", padding:"0 64px" }}>
-          {(() => { const [ref, vis] = useReveal(); return (
-            <div ref={ref} style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:48, opacity: vis?1:0, transform: vis?"none":"translateY(24px)", transition:"all .7s" }}>
+          <RevealDiv style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:48 }}>
               <div>
-                <div style={{ fontSize:"0.7rem", fontWeight:700, letterSpacing:".12em", textTransform:"uppercase", color:"rgba(250,248,243,.35)", marginBottom:12 }}>Don't miss out</div>
-                <h2 style={{ fontFamily:"var(--ff-display)", fontSize:"clamp(2rem,4vw,3rem)", fontWeight:900, color:"var(--cream)", marginBottom:10 }}>Trending This Week</h2>
-                <p style={{ color:"rgba(250,248,243,.45)", fontSize:"1rem" }}>Hot events happening in and around Patna.</p>
+                <div style={{ fontSize:"0.7rem", fontWeight:700, letterSpacing:".12em", textTransform:"uppercase", color:"#f4a023", marginBottom:12 }}>Don't miss out</div>
+                <h2 style={{ fontFamily:"var(--ff-display)", fontSize:"clamp(2rem,4vw,3rem)", fontWeight:900, background:"linear-gradient(90deg,#fff,#f4a023)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", marginBottom:10 }}>Trending This Week</h2>
+                <p style={{ color:"rgba(250,248,243,.65)", fontSize:"1rem", fontWeight:500 }}>Hot events happening in and around Patna.</p>
               </div>
               <a onClick={() => showToast("Showing all events…")} style={{ display:"flex", gap:6, fontWeight:700, fontSize:"0.88rem", color:"var(--saffron)", cursor:"pointer", whiteSpace:"nowrap" }}>See all →</a>
-            </div>
-          ); })()}
+          </RevealDiv>
 
           <div style={{ display:"grid", gridTemplateColumns:"1.5fr 1fr 1fr", gap:20 }}>
             <EventCard ev={EVENTS[0]} featured delay={0}   onToast={showToast} />
@@ -651,13 +698,11 @@ export default function Landing({ onLoginClick }) {
 
       {/* ── HOW IT WORKS ── */}
       <section id="how" style={{ padding:"96px 64px", maxWidth:1280, margin:"0 auto" }}>
-        {(() => { const [ref, vis] = useReveal(); return (
-          <div ref={ref} style={{ textAlign:"center", opacity: vis?1:0, transform: vis?"none":"translateY(24px)", transition:"all .7s", marginBottom:60 }}>
-            <div style={{ fontSize:"0.7rem", fontWeight:700, letterSpacing:".12em", textTransform:"uppercase", color:"var(--muted)", marginBottom:12 }}>Simple as it gets</div>
-            <h2 style={{ fontFamily:"var(--ff-display)", fontSize:"clamp(2rem,4vw,3rem)", fontWeight:900, marginBottom:10 }}>Three Steps to Your People</h2>
-            <p style={{ color:"var(--muted)", maxWidth:420, margin:"0 auto" }}>No complicated setup. Find, join, show up.</p>
-          </div>
-        ); })()}
+        <RevealDiv style={{ textAlign:"center", marginBottom:60 }}>
+            <div style={{ fontSize:"0.7rem", fontWeight:700, letterSpacing:".12em", textTransform:"uppercase", color:"#f03e6e", marginBottom:12 }}>Simple as it gets</div>
+            <h2 style={{ fontFamily:"var(--ff-display)", fontSize:"clamp(2rem,4vw,3rem)", fontWeight:900, marginBottom:10, background:"linear-gradient(135deg,#0c0c14,#3d3bf5,#f03e6e)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>Three Steps to Your People</h2>
+            <p style={{ color:"#6b6b8a", maxWidth:420, margin:"0 auto", fontWeight:500 }}>No complicated setup. Find, join, show up.</p>
+        </RevealDiv>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:48 }}>
           <StepCard index={0} num="01" title="Tell us what you love" desc="Pick your interests — from cricket to calligraphy. We'll surface the most relevant events in your city, instantly." />
           <StepCard index={1} num="02" title="Discover & RSVP"      desc="Browse events on a map or by category. One tap to reserve your spot — no forms, no fuss, no fees for most events." />
@@ -666,8 +711,7 @@ export default function Landing({ onLoginClick }) {
       </section>
 
       {/* ── QUOTE ── */}
-      {(() => { const [ref, vis] = useReveal(); return (
-        <section ref={ref} style={{
+      <RevealSection style={{
           background:"linear-gradient(135deg,var(--indigo),#5f4df4,#8b2fcc)",
           padding:"100px 64px", textAlign:"center", position:"relative", overflow:"hidden",
         }}>
@@ -682,28 +726,21 @@ export default function Landing({ onLoginClick }) {
             fontWeight:700, color:"#fff",
             maxWidth:800, margin:"0 auto 28px",
             lineHeight:1.3, position:"relative",
-            opacity: vis?1:0, transform: vis?"none":"translateY(28px)",
-            transition:"all .9s ease",
           }}>
             "In a digital world, true belonging is found in the physical spaces we share."
           </blockquote>
           <p style={{
             color:"rgba(255,255,255,.55)", fontWeight:600, fontSize:"0.85rem",
             letterSpacing:".1em", textTransform:"uppercase", position:"relative",
-            opacity: vis?1:0, transition:"all .9s ease .2s",
           }}>— The Sangam Philosophy</p>
-        </section>
-      ); })()}
+      </RevealSection>
 
       {/* ── CTA ── */}
-      {(() => { const [ref, vis] = useReveal(); return (
-        <section style={{ padding:"96px 64px", maxWidth:1280, margin:"0 auto" }}>
-          <div ref={ref} style={{
+      <section style={{ padding:"96px 64px", maxWidth:1280, margin:"0 auto" }}>
+          <RevealDiv style={{
             background:"var(--ink)", borderRadius:32, padding:"80px",
             display:"grid", gridTemplateColumns:"1fr auto", gap:48, alignItems:"center",
             position:"relative", overflow:"hidden",
-            opacity: vis?1:0, transform: vis?"none":"translateY(28px)",
-            transition:"all .8s ease",
           }}>
             <div style={{ position:"absolute", top:-80, right:-80, width:400, height:400, borderRadius:"50%", background:"radial-gradient(circle,rgba(61,59,245,.4),transparent 70%)", pointerEvents:"none" }}/>
             <div style={{ position:"absolute", bottom:-60, left:60, width:300, height:300, borderRadius:"50%", background:"radial-gradient(circle,rgba(244,160,35,.2),transparent 70%)", pointerEvents:"none" }}/>
@@ -733,16 +770,15 @@ export default function Landing({ onLoginClick }) {
                 onMouseLeave={e => { e.currentTarget.style.borderColor="rgba(250,248,243,.2)"; e.currentTarget.style.color="rgba(250,248,243,.6)"; }}
               >Explore Events</button>
             </div>
-          </div>
-        </section>
-      ); })()}
+          </RevealDiv>
+      </section>
 
       {/* ── FOOTER ── */}
       <footer style={{ background:"#07070d", color:"rgba(250,248,243,.45)", padding:"64px 64px 32px" }}>
         <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 1fr", gap:48, paddingBottom:48, borderBottom:"1px solid rgba(255,255,255,.06)", marginBottom:32 }}>
           <div>
-            <div style={{ fontFamily:"var(--ff-display)", fontSize:"1.6rem", fontWeight:900, color:"var(--cream)", marginBottom:14 }}>
-              Sangam<span style={{ color:"var(--saffron)" }}>.</span>
+            <div style={{ marginBottom:14 }}>
+              <img src={logo} alt="Sangam" style={{ height:36, width:"auto", objectFit:"contain", filter:"brightness(0) invert(1)" }} />
             </div>
             <p style={{ fontSize:"0.87rem", lineHeight:1.7, maxWidth:260 }}>Building the infrastructure for real-world human connection. One city at a time.</p>
           </div>

@@ -1,11 +1,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, Eye, EyeOff, ArrowLeft, Trophy, BookOpen, Users, Plane } from "lucide-react";
-
-const DEMO_ACCOUNTS = {
-  student: { email: "student@sangam.com", password: "student123" },
-  organizer: { email: "organizer@sangam.com", password: "organizer123" },
-};
+import { authAPI } from "../api";
 
 const Login = ({ onLogin, onBack }) => {
   const [mode, setMode] = useState("select");
@@ -17,31 +13,35 @@ const Login = ({ onLogin, onBack }) => {
 
   const handleRoleSelect = (r) => { setRole(r); setMode("login"); setError(""); };
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError("");
-    setTimeout(() => {
-      const demo = DEMO_ACCOUNTS[role];
-      if (form.email === demo.email && form.password === demo.password) {
-        onLogin(role, role === "student" ? "Aryan Kumar" : "Rohit Sharma");
-      } else {
-        setError("Invalid credentials. Use the demo autofill below.");
-      }
+    try {
+      const { token, user } = await authAPI.login(form.email, form.password);
+      localStorage.setItem("token", token);
+      onLogin(user.role, user.name, user);
+    } catch (err) {
+      setError(err.message);
+    } finally {
       setLoading(false);
-    }, 900);
+    }
   };
 
-  const handleRegister = (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
     if (!form.name || !form.email || !form.password) { setError("Please fill all fields."); return; }
     setLoading(true);
-    setTimeout(() => { onLogin(role, form.name); setLoading(false); }, 900);
-  };
-
-  const fillDemo = () => {
-    const d = DEMO_ACCOUNTS[role];
-    setForm(f => ({ ...f, email: d.email, password: d.password }));
+    setError("");
+    try {
+      const { token, user } = await authAPI.register(form.name, form.email, form.password, role);
+      localStorage.setItem("token", token);
+      onLogin(user.role, user.name, user);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const accent = role === "organizer" ? "#F59E0B" : "#6366F1";
@@ -187,16 +187,13 @@ const Login = ({ onLogin, onBack }) => {
                   {role === "student" ? "🎓 Student" : "🌐 Organizer"} Login
                 </div>
                 <h1 style={{ fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 30, color: "#F1F5F9", marginBottom: 6 }}>Sign in</h1>
-                <p style={{ color: "#64748B", fontSize: 14, marginBottom: 28 }}>
-                  Demo account?{" "}
-                  <button onClick={fillDemo} style={{ background: "none", border: "none", color: accent, fontWeight: 700, fontSize: 14, padding: 0 }}>Autofill credentials →</button>
-                </p>
+                <p style={{ color: "#64748B", fontSize: 14, marginBottom: 28 }}>Enter your credentials to continue.</p>
 
                 <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
                   <div>
                     <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#64748B", marginBottom: 8, letterSpacing: 0.5, textTransform: "uppercase" }}>Email</label>
                     <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                      placeholder={DEMO_ACCOUNTS[role].email} required
+                      placeholder="you@example.com" required
                       style={{ width: "100%", padding: "13px 16px", background: "#13151F", border: "1.5px solid #1E2235", borderRadius: 12, color: "#E2E8F0", fontSize: 14, fontFamily: "'DM Sans', sans-serif", outline: "none", transition: "border-color 0.2s" }}
                       onFocus={e => e.target.style.borderColor = accent}
                       onBlur={e => e.target.style.borderColor = "#1E2235"}

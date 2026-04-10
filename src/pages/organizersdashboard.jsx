@@ -1,9 +1,37 @@
-import { useState } from "react";
+﻿import { useState, useEffect } from "react";
+import logo from "../assets/logo.jpeg";
+import { eventsAPI, registrationsAPI, broadcastsAPI, analyticsAPI } from "../api";
+
+const GLOBAL_CSS = `
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --ink: #0c0c14;
+    --cream: #faf8f3;
+    --saffron: #f4a023;
+    --saffron-g: #e8850d;
+    --indigo: #3d3bf5;
+    --rose: #c42050;
+    --sage: #17885a;
+    --muted: #7a7890;
+    --border: #ece9f0;
+    --surface: #f5f3ee;
+    --ff-display: 'Playfair Display', Georgia, serif;
+    --ff-body: 'DM Sans', system-ui, sans-serif;
+  }
+  body { font-family: var(--ff-body); background: var(--cream); color: var(--ink); }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes pulse-dot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.5; transform:scale(1.5); } }
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
+  table { border-collapse: collapse; }
+`;
 
 const initialEvents = [
-  { id: 1, title: "City Marathon 2026", category: "Sports", date: "2026-04-20", time: "06:00", location: "Central Park", capacity: 200, registered: 188, status: "Active", image: "🏃", color: "#FF6B35", description: "Annual city marathon open to all age groups." },
-  { id: 2, title: "Literary Festival 2026", category: "Literary", date: "2026-05-10", time: "10:00", location: "Convention Center", capacity: 500, registered: 312, status: "Active", image: "🎭", color: "#F59E0B", description: "A celebration of books, authors and ideas." },
-  { id: 3, title: "Photography Meetup", category: "Hobby", date: "2026-05-02", time: "16:00", location: "Old Town Square", capacity: 40, registered: 20, status: "Draft", image: "📸", color: "#A78BFA", description: "Monthly photographer community meetup." },
+  { id: 1, title: "City Marathon 2026", category: "Sports", date: "2026-04-20", time: "06:00", location: "Central Park", capacity: 200, registered: 188, status: "Active", image: "🏃", grad: "linear-gradient(135deg,#f4a023,#e85d04)", color: "#f4a023", description: "Annual city marathon open to all age groups." },
+  { id: 2, title: "Literary Festival 2026", category: "Literary", date: "2026-05-10", time: "10:00", location: "Convention Center", capacity: 500, registered: 312, status: "Active", image: "🎭", grad: "linear-gradient(135deg,#f4a023,#c97b00)", color: "#f4a023", description: "A celebration of books, authors and ideas." },
+  { id: 3, title: "Photography Meetup", category: "Hobby", date: "2026-05-02", time: "16:00", location: "Old Town Square", capacity: 40, registered: 20, status: "Draft", image: "📸", grad: "linear-gradient(135deg,#8b2fcc,#c42050)", color: "#8b2fcc", description: "Monthly photographer community meetup." },
 ];
 
 const participants = [
@@ -15,59 +43,135 @@ const participants = [
 ];
 
 const categories = ["Sports", "Literary", "Hobby", "Adventure", "Music", "Tech", "Food"];
+const emptyForm = { title: "", category: "Sports", date: "", time: "", location: "", capacity: "", description: "", image: "🎉", color: "#f4a023", grad: "linear-gradient(135deg,#f4a023,#e85d04)" };
 
-const emptyForm = { title: "", category: "Sports", date: "", time: "", location: "", capacity: "", description: "", image: "🎉", color: "#6366F1" };
+const NAV = [
+  { id: "overview", icon: "▦", label: "Overview" },
+  { id: "events", icon: "◈", label: "My Events" },
+  { id: "participants", icon: "◉", label: "Participants" },
+  { id: "messages", icon: "◇", label: "Broadcast" },
+  { id: "analytics", icon: "✦", label: "Analytics" },
+  { id: "settings", icon: "◎", label: "Settings" },
+];
 
-export default function OrganizerDashboard() {
+const colorOptions = [
+  { hex: "#f4a023", grad: "linear-gradient(135deg,#f4a023,#e85d04)" },
+  { hex: "#3d3bf5", grad: "linear-gradient(135deg,#3d3bf5,#8b2fcc)" },
+  { hex: "#17885a", grad: "linear-gradient(135deg,#17885a,#0d5c3a)" },
+  { hex: "#c42050", grad: "linear-gradient(135deg,#c42050,#8b0f3a)" },
+  { hex: "#8b2fcc", grad: "linear-gradient(135deg,#8b2fcc,#5c1d8c)" },
+  { hex: "#0d9488", grad: "linear-gradient(135deg,#0d9488,#0a7060)" },
+];
+const emojiOptions = ["🎉","🏃","📚","🎭","📸","🏔️","♟️","🎵","🍕","💻","⚽","🎨"];
+
+function statusStyle(status) {
+  if (status === "Active" || status === "Confirmed") return { bg: "rgba(23,136,90,.08)", color: "#17885a", border: "rgba(23,136,90,.2)" };
+  if (status === "Draft" || status === "Pending") return { bg: "rgba(61,59,245,.06)", color: "#3d3bf5", border: "rgba(61,59,245,.2)" };
+  if (status === "Waitlisted" || status === "Paused") return { bg: "rgba(244,160,35,.1)", color: "#b06a00", border: "rgba(244,160,35,.3)" };
+  return { bg: "var(--surface)", color: "var(--muted)", border: "var(--border)" };
+}
+
+function StatusPill({ label }) {
+  const s = statusStyle(label);
+  return <span style={{ background: s.bg, color: s.color, border: `1px solid ${s.border}`, borderRadius: 100, padding: "3px 12px", fontSize: "0.72rem", fontWeight: 700 }}>{label}</span>;
+}
+
+export default function OrganizerDashboard({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState("overview");
-  const [events, setEvents] = useState(initialEvents);
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [events, setEvents] = useState([]);
+  const [analytics, setAnalytics] = useState(null);
+  const [participants, setParticipants] = useState([]);
+  const [broadcasts, setBroadcasts] = useState([]);
+  const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [msgText, setMsgText] = useState("");
+  const [msgSubject, setMsgSubject] = useState("");
+  const [msgType, setMsgType] = useState("Announcement");
   const [msgSent, setMsgSent] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null);
+
+  useEffect(() => {
+    if (!document.getElementById("sangam-org-css")) {
+      const s = document.createElement("style"); s.id = "sangam-org-css"; s.textContent = GLOBAL_CSS; document.head.appendChild(s);
+    }
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      const [evs, anal, broads] = await Promise.all([
+        eventsAPI.getMine(),
+        analyticsAPI.get(),
+        broadcastsAPI.getAll(),
+      ]);
+      setEvents(evs);
+      setAnalytics(anal);
+      setBroadcasts(broads);
+    } catch (err) { console.error(err); }
+  };
+
+  useEffect(() => {
+    if (selectedEvent) {
+      registrationsAPI.getParticipants(selectedEvent.id).then(setParticipants).catch(console.error);
+    } else {
+      // load all participants across all events
+      Promise.all(events.map(e => registrationsAPI.getParticipants(e.id)))
+        .then(results => setParticipants(results.flat()))
+        .catch(console.error);
+    }
+  }, [selectedEvent, events]);
 
   const totalRegistered = events.reduce((s, e) => s + e.registered, 0);
   const totalCapacity = events.reduce((s, e) => s + e.capacity, 0);
 
   const handleFormChange = (field, val) => setForm(f => ({ ...f, [field]: val }));
 
-  const handleCreateOrEdit = () => {
+  const handleCreateOrEdit = async () => {
     if (!form.title || !form.date || !form.location) return;
-    if (editingId) {
-      setEvents(ev => ev.map(e => e.id === editingId ? { ...e, ...form, capacity: Number(form.capacity) } : e));
-    } else {
-      const newEvent = { ...form, id: Date.now(), registered: 0, status: "Draft", capacity: Number(form.capacity) || 50 };
-      setEvents(ev => [...ev, newEvent]);
-    }
-    setShowCreateModal(false);
-    setForm(emptyForm);
-    setEditingId(null);
+    try {
+      if (editingId) {
+        await eventsAPI.update(editingId, { ...form, capacity: Number(form.capacity) });
+      } else {
+        await eventsAPI.create({ ...form, capacity: Number(form.capacity) || 50 });
+      }
+      setShowModal(false); setForm(emptyForm); setEditingId(null);
+      loadData();
+    } catch (err) { console.error(err); }
   };
 
   const handleEdit = (event) => {
-    setForm({ title: event.title, category: event.category, date: event.date, time: event.time, location: event.location, capacity: event.capacity, description: event.description, image: event.image, color: event.color });
-    setEditingId(event.id);
-    setShowCreateModal(true);
+    setForm({ title: event.title, category: event.category, date: event.date, time: event.time, location: event.location, capacity: event.capacity, description: event.description, image: event.image, color: event.color, grad: event.grad });
+    setEditingId(event.id); setShowModal(true);
   };
 
-  const handleDelete = (id) => {
-    setEvents(ev => ev.filter(e => e.id !== id));
-    setConfirmDelete(null);
+  const handleDelete = async (id) => {
+    try {
+      await eventsAPI.delete(id);
+      setConfirmDelete(null);
+      loadData();
+    } catch (err) { console.error(err); }
   };
 
-  const toggleStatus = (id) => {
-    setEvents(ev => ev.map(e => e.id === id ? { ...e, status: e.status === "Active" ? "Paused" : "Active" } : e));
+  const toggleStatus = async (id) => {
+    const ev = events.find(e => e.id === id);
+    try {
+      await eventsAPI.update(id, { ...ev, status: ev.status === "Active" ? "Paused" : "Active" });
+      loadData();
+    } catch (err) { console.error(err); }
   };
 
-  const sendMessage = () => {
-    setMsgSent(true);
-    setTimeout(() => setMsgSent(false), 3000);
-    setMsgText("");
+  const sendMessage = async () => {
+    if (!msgSubject || !msgText) return;
+    try {
+      await broadcastsAPI.send({ event_id: selectedEvent?.id || null, subject: msgSubject, message: msgText, type: msgType });
+      setMsgSent(true); setTimeout(() => setMsgSent(false), 3000);
+      setMsgText(""); setMsgSubject("");
+      broadcastsAPI.getAll().then(setBroadcasts);
+    } catch (err) { console.error(err); }
   };
 
   const filtered = events.filter(e => {
@@ -76,167 +180,140 @@ export default function OrganizerDashboard() {
     return matchStatus && matchSearch;
   });
 
-  const emojiOptions = ["🎉", "🏃", "📚", "🎭", "📸", "🏔️", "♟️", "🎵", "🍕", "💻", "⚽", "🎨"];
-  const colorOptions = ["#6366F1", "#FF6B35", "#4ECDC4", "#A78BFA", "#F59E0B", "#10B981", "#EF4444", "#EC4899"];
+  const pageTitle = { overview: "Dashboard Overview", events: "Manage Events", participants: "Participants", messages: "Broadcast Message", analytics: "Analytics", settings: "Settings" }[activeTab];
+
+  const inputStyle = { width: "100%", padding: "10px 14px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, color: "var(--ink)", fontSize: "0.88rem", outline: "none", fontFamily: "var(--ff-body)" };
+  const labelStyle = { display: "block", fontSize: "0.72rem", fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 6, marginTop: 16 };
 
   return (
-    <div style={styles.root}>
+    <div style={{ display: "flex", minHeight: "100vh", background: "var(--cream)", fontFamily: "var(--ff-body)", color: "var(--ink)" }}>
+
       {/* Sidebar */}
-      <aside style={styles.sidebar}>
-        <div style={styles.logo}>
-          <div style={styles.logoIcon}>🌐</div>
-          <span style={styles.logoText}>CommuniHub</span>
+      <aside style={{ width: 232, background: "#fff", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", position: "sticky", top: 0, height: "100vh" }}>
+        <div style={{ padding: "26px 24px 18px", borderBottom: "1px solid var(--border)" }}>
+          <img src={logo} alt="Sangam" style={{ height:36, width:"auto", objectFit:"contain", marginBottom:6 }} />
+          <div style={{ marginTop: 6, display: "inline-block", background: "rgba(244,160,35,.12)", color: "#b06a00", border: "1px solid rgba(244,160,35,.3)", borderRadius: 100, padding: "2px 12px", fontSize: "0.68rem", fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase" }}>Organizer Portal</div>
         </div>
-        <div style={styles.orgBadge}>Organizer Portal</div>
-        <nav style={styles.nav}>
-          {[
-            { id: "overview", icon: "📊", label: "Overview" },
-            { id: "events", icon: "🗓️", label: "My Events" },
-            { id: "participants", icon: "👥", label: "Participants" },
-            { id: "messages", icon: "💬", label: "Broadcast" },
-            { id: "analytics", icon: "📈", label: "Analytics" },
-            { id: "settings", icon: "⚙️", label: "Settings" },
-          ].map(item => (
-            <button
-              key={item.id}
-              style={{ ...styles.navItem, ...(activeTab === item.id ? styles.navItemActive : {}) }}
-              onClick={() => setActiveTab(item.id)}
-            >
-              <span style={styles.navIcon}>{item.icon}</span>
-              <span>{item.label}</span>
+
+        <nav style={{ flex: 1, padding: "20px 12px", display: "flex", flexDirection: "column", gap: 2 }}>
+          {NAV.map(item => (
+            <button key={item.id} onClick={() => setActiveTab(item.id)}
+              style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 14px", borderRadius: 12, border: "none", background: activeTab === item.id ? "rgba(244,160,35,.1)" : "transparent", color: activeTab === item.id ? "var(--saffron-g)" : "var(--muted)", cursor: "pointer", fontSize: "0.88rem", fontFamily: "var(--ff-body)", fontWeight: activeTab === item.id ? 700 : 500, textAlign: "left", transition: "all .2s", borderLeft: activeTab === item.id ? "2.5px solid var(--saffron)" : "2.5px solid transparent" }}>
+              <span style={{ fontSize: "0.82rem", opacity: activeTab === item.id ? 1 : 0.6 }}>{item.icon}</span>
+              {item.label}
             </button>
           ))}
         </nav>
-        <div style={styles.sidebarFooter}>
-          <div style={styles.avatarRow}>
-            <div style={styles.avatarSmall}>RS</div>
-            <div>
-              <div style={styles.avatarName}>Rohit Sharma</div>
-              <div style={styles.avatarRole}>Event Organizer</div>
+
+        <div style={{ padding: "18px 16px", borderTop: "1px solid var(--border)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg,#f4a023,#e85d04)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.78rem", fontWeight: 800, color: "#fff", flexShrink: 0 }}>{user?.name?.[0] || "R"}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: "0.82rem", fontWeight: 700 }}>{user?.name || "Organizer"}</div>
+              <div style={{ fontSize: "0.72rem", color: "var(--muted)" }}>Event Organizer</div>
             </div>
+            <button onClick={onLogout} style={{ background: "transparent", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600 }}>Logout</button>
           </div>
         </div>
       </aside>
 
       {/* Main */}
-      <main style={styles.main}>
+      <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         {/* Topbar */}
-        <header style={styles.topbar}>
+        <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 36px", borderBottom: "1px solid var(--border)", background: "#fff", position: "sticky", top: 0, zIndex: 10 }}>
           <div>
-            <h1 style={styles.pageTitle}>
-              {activeTab === "overview" && "Dashboard Overview"}
-              {activeTab === "events" && "Manage Events"}
-              {activeTab === "participants" && "Participants"}
-              {activeTab === "messages" && "Broadcast Message"}
-              {activeTab === "analytics" && "Analytics"}
-              {activeTab === "settings" && "Settings"}
-            </h1>
-            <p style={styles.pageSubtitle}>Welcome back, Rohit · {new Date().toLocaleDateString("en-IN", { weekday: "long", month: "long", day: "numeric" })}</p>
+            <h1 style={{ fontFamily: "var(--ff-display)", fontWeight: 900, fontSize: "1.5rem" }}>{pageTitle}</h1>
+            <p style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: 2 }}>
+              <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "var(--sage)", marginRight: 5, animation: "pulse-dot 2s infinite", verticalAlign: "middle" }}/>
+              Welcome back, {user?.name || "Organizer"} · {new Date().toLocaleDateString("en-IN", { weekday: "long", month: "long", day: "numeric" })}
+            </p>
           </div>
-          <div style={styles.topbarRight}>
-            <div style={styles.searchWrap}>
-              <span>🔍</span>
-              <input style={styles.searchInput} placeholder="Search..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 100, padding: "0 16px", gap: 8 }}>
+              <span style={{ fontSize: "0.8rem", color: "var(--muted)" }}>🔍</span>
+              <input style={{ background: "transparent", border: "none", outline: "none", color: "var(--ink)", fontSize: "0.85rem", padding: "9px 0", width: 160, fontFamily: "var(--ff-body)" }} placeholder="Search…" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
             </div>
-            <button style={styles.createBtn} onClick={() => { setShowCreateModal(true); setEditingId(null); setForm(emptyForm); }}>
+            <button onClick={() => { setShowModal(true); setEditingId(null); setForm(emptyForm); }}
+              style={{ padding: "9px 22px", background: "var(--ink)", color: "var(--cream)", border: "none", borderRadius: 100, fontFamily: "var(--ff-body)", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer", letterSpacing: ".02em" }}>
               + Create Event
             </button>
           </div>
         </header>
 
-        <div style={styles.content}>
+        <div style={{ flex: 1, padding: "32px 36px", overflowY: "auto" }}>
 
-          {/* OVERVIEW TAB */}
+          {/* OVERVIEW */}
           {activeTab === "overview" && (
-            <div>
-              <div style={styles.statsGrid}>
+            <div style={{ animation: "fadeUp .5s ease both" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 32 }}>
                 {[
-                  { label: "Total Events", value: events.length, icon: "🗓️", color: "#6366F1", sub: `${events.filter(e=>e.status==="Active").length} Active` },
-                  { label: "Total Registered", value: totalRegistered, icon: "👥", color: "#10B981", sub: `of ${totalCapacity} capacity` },
-                  { label: "Fill Rate", value: Math.round((totalRegistered/totalCapacity)*100)+"%", icon: "📊", color: "#F59E0B", sub: "Across all events" },
-                  { label: "Draft Events", value: events.filter(e=>e.status==="Draft").length, icon: "📝", color: "#A78BFA", sub: "Ready to publish" },
+                  { label: "Total Events", value: events.length, sub: `${events.filter(e=>e.status==="Active").length} active`, color: "var(--saffron)" },
+                  { label: "Total Registered", value: totalRegistered, sub: `of ${totalCapacity} capacity`, color: "#17885a" },
+                  { label: "Fill Rate", value: Math.round((totalRegistered / totalCapacity) * 100) + "%", sub: "Across all events", color: "var(--indigo)" },
+                  { label: "Draft Events", value: events.filter(e=>e.status==="Draft").length, sub: "Ready to publish", color: "#8b2fcc" },
                 ].map((s, i) => (
-                  <div key={i} style={{ ...styles.statCard, borderLeft: `4px solid ${s.color}` }}>
-                    <div style={styles.statTop}>
-                      <div>
-                        <div style={styles.statLabel}>{s.label}</div>
-                        <div style={{ ...styles.statValue, color: s.color }}>{s.value}</div>
-                        <div style={styles.statSub}>{s.sub}</div>
-                      </div>
-                      <div style={{ ...styles.statIcon, background: `${s.color}22` }}>{s.icon}</div>
-                    </div>
+                  <div key={i} style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 16, padding: "20px 22px", borderTop: `3px solid ${s.color}` }}>
+                    <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 8 }}>{s.label}</div>
+                    <div style={{ fontFamily: "var(--ff-display)", fontSize: "2rem", fontWeight: 900, color: s.color, marginBottom: 4 }}>{s.value}</div>
+                    <div style={{ fontSize: "0.72rem", color: "var(--muted)" }}>{s.sub}</div>
                   </div>
                 ))}
               </div>
 
-              {/* Recent Events Quick View */}
-              <div style={styles.sectionHeader}>
-                <h2 style={styles.sectionTitle}>Active Events</h2>
-                <button style={styles.viewAllBtn} onClick={() => setActiveTab("events")}>View All →</button>
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 18 }}>
+                <h2 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1.2rem" }}>Active Events</h2>
+                <button onClick={() => setActiveTab("events")} style={{ background: "transparent", border: "none", color: "var(--saffron-g)", cursor: "pointer", fontSize: "0.85rem", fontFamily: "var(--ff-body)", fontWeight: 700 }}>View All →</button>
               </div>
-              <div style={styles.eventsGrid}>
-                {events.filter(e => e.status === "Active").map(event => (
-                  <div key={event.id} style={styles.eventCard}>
-                    <div style={{ ...styles.eventTop, background: `linear-gradient(135deg, ${event.color}33, ${event.color}55)` }}>
-                      <span style={{ fontSize: 40 }}>{event.image}</span>
-                      <div style={{ ...styles.statusPill, background: event.status === "Active" ? "#10B98122" : "#F59E0B22", color: event.status === "Active" ? "#10B981" : "#F59E0B" }}>
-                        ● {event.status}
-                      </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 18, marginBottom: 36 }}>
+                {events.filter(e => e.status === "Active").map(ev => (
+                  <div key={ev.id} style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 18, overflow: "hidden" }}>
+                    <div style={{ height: 110, background: ev.grad, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px" }}>
+                      <span style={{ fontSize: "2.5rem" }}>{ev.image}</span>
+                      <StatusPill label={ev.status} />
                     </div>
-                    <div style={styles.eventBody}>
-                      <h3 style={styles.eventTitle}>{event.title}</h3>
-                      <div style={styles.eventMeta}>
-                        <span>📅 {event.date}</span>
-                        <span>📍 {event.location}</span>
+                    <div style={{ padding: "16px 18px" }}>
+                      <h3 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "0.95rem", marginBottom: 6 }}>{ev.title}</h3>
+                      <div style={{ fontSize: "0.75rem", color: "var(--muted)", marginBottom: 14 }}>📅 {ev.date} · 📍 {ev.location}</div>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "var(--muted)", marginBottom: 8 }}>
+                        <span>Registrations</span>
+                        <span style={{ fontWeight: 700, color: "var(--ink)" }}>{ev.registered}/{ev.capacity}</span>
                       </div>
-                      <div style={styles.progressWrap}>
-                        <div style={styles.progressHeader}>
-                          <span style={{ fontSize: 12, color: "#94A3B8" }}>Registrations</span>
-                          <span style={{ fontSize: 12, color: "#E2E8F0", fontWeight: 600 }}>{event.registered}/{event.capacity}</span>
-                        </div>
-                        <div style={styles.progressBar}>
-                          <div style={{ ...styles.progressFill, width: `${Math.min((event.registered / event.capacity) * 100, 100)}%`, background: event.color }} />
-                        </div>
+                      <div style={{ height: 6, background: "var(--surface)", borderRadius: 3, overflow: "hidden", marginBottom: 14 }}>
+                        <div style={{ width: `${Math.min((ev.registered / ev.capacity) * 100, 100)}%`, height: "100%", background: ev.grad, borderRadius: 3, transition: "width .5s ease" }}/>
                       </div>
-                      <div style={styles.cardActions}>
-                        <button style={styles.editBtn} onClick={() => handleEdit(event)}>✏️ Edit</button>
-                        <button style={styles.viewBtn} onClick={() => { setSelectedEvent(event); setActiveTab("participants"); }}>👥 View</button>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button onClick={() => handleEdit(ev)} style={{ flex: 1, padding: "8px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, cursor: "pointer", fontSize: "0.78rem", fontFamily: "var(--ff-body)", color: "var(--ink)" }}>✏️ Edit</button>
+                        <button onClick={() => { setSelectedEvent(ev); setActiveTab("participants"); }} style={{ flex: 1, padding: "8px", background: "rgba(244,160,35,.1)", border: "1px solid rgba(244,160,35,.3)", borderRadius: 10, cursor: "pointer", fontSize: "0.78rem", fontFamily: "var(--ff-body)", color: "var(--saffron-g)", fontWeight: 600 }}>👥 View</button>
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
 
-              {/* Recent Participants */}
-              <div style={{ ...styles.sectionHeader, marginTop: 28 }}>
-                <h2 style={styles.sectionTitle}>Recent Registrations</h2>
-              </div>
-              <div style={styles.tableWrap}>
-                <table style={styles.table}>
+              <h2 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1.2rem", marginBottom: 16 }}>Recent Registrations</h2>
+              <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 16, overflow: "hidden" }}>
+                <table style={{ width: "100%", fontSize: "0.85rem" }}>
                   <thead>
                     <tr>
-                      {["Name", "Email", "Event", "Status", "Joined"].map(h => (
-                        <th key={h} style={styles.th}>{h}</th>
+                      {["Name","Email","Event","Status","Joined"].map(h => (
+                        <th key={h} style={{ textAlign: "left", padding: "13px 20px", color: "var(--muted)", fontSize: "0.7rem", fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", background: "var(--surface)", borderBottom: "1px solid var(--border)" }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {participants.slice(0, 4).map(p => (
-                      <tr key={p.id} style={styles.tr}>
-                        <td style={styles.td}>
-                          <div style={styles.participantRow}>
-                            <div style={styles.pAvatar}>{p.name[0]}</div>
-                            {p.name}
+                      <tr key={p.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                        <td style={{ padding: "13px 20px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <div style={{ width: 30, height: 30, borderRadius: "50%", background: "linear-gradient(135deg,var(--saffron),var(--saffron-g))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.7rem", fontWeight: 800, color: "#fff", flexShrink: 0 }}>{p.name[0]}</div>
+                            <span style={{ fontWeight: 600 }}>{p.name}</span>
                           </div>
                         </td>
-                        <td style={{ ...styles.td, color: "#64748B" }}>{p.email}</td>
-                        <td style={styles.td}>{p.event}</td>
-                        <td style={styles.td}>
-                          <span style={{ ...styles.statusPill, background: p.status === "Confirmed" ? "#10B98122" : p.status === "Waitlisted" ? "#F59E0B22" : "#6366F122", color: p.status === "Confirmed" ? "#10B981" : p.status === "Waitlisted" ? "#F59E0B" : "#6366F1" }}>
-                            {p.status}
-                          </span>
-                        </td>
-                        <td style={{ ...styles.td, color: "#64748B" }}>{p.joined}</td>
+                        <td style={{ padding: "13px 20px", color: "var(--muted)" }}>{p.email}</td>
+                        <td style={{ padding: "13px 20px" }}>{p.event}</td>
+                        <td style={{ padding: "13px 20px" }}><StatusPill label={p.status} /></td>
+                        <td style={{ padding: "13px 20px", color: "var(--muted)" }}>{p.joined}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -245,39 +322,41 @@ export default function OrganizerDashboard() {
             </div>
           )}
 
-          {/* EVENTS TAB */}
+          {/* EVENTS */}
           {activeTab === "events" && (
-            <div>
-              <div style={styles.eventsToolbar}>
-                <div style={styles.filterBtns}>
-                  {["All", "Active", "Draft", "Paused"].map(s => (
-                    <button key={s} style={{ ...styles.filterBtn, ...(filterStatus === s ? styles.filterBtnActive : {}) }} onClick={() => setFilterStatus(s)}>{s}</button>
+            <div style={{ animation: "fadeUp .5s ease both" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {["All","Active","Draft","Paused"].map(s => (
+                    <button key={s} onClick={() => setFilterStatus(s)}
+                      style={{ padding: "7px 18px", borderRadius: 100, border: filterStatus === s ? "none" : "1px solid var(--border)", background: filterStatus === s ? "var(--ink)" : "#fff", color: filterStatus === s ? "var(--cream)" : "var(--muted)", cursor: "pointer", fontSize: "0.8rem", fontFamily: "var(--ff-body)", fontWeight: 600, transition: "all .2s" }}>
+                      {s}
+                    </button>
                   ))}
                 </div>
-                <button style={styles.createBtn} onClick={() => { setShowCreateModal(true); setEditingId(null); setForm(emptyForm); }}>+ New Event</button>
+                <button onClick={() => { setShowModal(true); setEditingId(null); setForm(emptyForm); }}
+                  style={{ padding: "9px 20px", background: "var(--ink)", color: "var(--cream)", border: "none", borderRadius: 100, fontFamily: "var(--ff-body)", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer" }}>+ New Event</button>
               </div>
 
-              <div style={styles.eventsTable}>
-                {filtered.map(event => (
-                  <div key={event.id} style={styles.eventTableRow}>
-                    <div style={{ ...styles.eventRowIcon, background: `${event.color}22` }}>{event.image}</div>
-                    <div style={styles.eventRowInfo}>
-                      <div style={styles.eventRowTitle}>{event.title}</div>
-                      <div style={styles.eventRowMeta}>📅 {event.date} {event.time} · 📍 {event.location} · 🏷️ {event.category}</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {filtered.map(ev => (
+                  <div key={ev.id} style={{ display: "flex", alignItems: "center", gap: 16, background: "#fff", border: "1px solid var(--border)", borderRadius: 16, padding: "16px 20px" }}>
+                    <div style={{ width: 50, height: 50, borderRadius: 14, background: ev.grad, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.4rem", flexShrink: 0 }}>{ev.image}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: "0.9rem", fontFamily: "var(--ff-display)" }}>{ev.title}</div>
+                      <div style={{ fontSize: "0.72rem", color: "var(--muted)", marginTop: 3 }}>📅 {ev.date} {ev.time} · 📍 {ev.location} · 🏷️ {ev.category}</div>
                     </div>
-                    <div style={styles.progressCompact}>
-                      <div style={styles.progressBar}>
-                        <div style={{ ...styles.progressFill, width: `${Math.min((event.registered / event.capacity) * 100, 100)}%`, background: event.color }} />
+                    <div style={{ width: 130 }}>
+                      <div style={{ height: 5, background: "var(--surface)", borderRadius: 3, overflow: "hidden", marginBottom: 4 }}>
+                        <div style={{ width: `${Math.min((ev.registered / ev.capacity) * 100, 100)}%`, height: "100%", background: ev.grad, borderRadius: 3 }}/>
                       </div>
-                      <span style={{ fontSize: 11, color: "#64748B" }}>{event.registered}/{event.capacity}</span>
+                      <span style={{ fontSize: "0.7rem", color: "var(--muted)" }}>{ev.registered}/{ev.capacity}</span>
                     </div>
-                    <span style={{ ...styles.statusPill, background: event.status === "Active" ? "#10B98122" : event.status === "Draft" ? "#6366F122" : "#F59E0B22", color: event.status === "Active" ? "#10B981" : event.status === "Draft" ? "#6366F1" : "#F59E0B" }}>
-                      {event.status}
-                    </span>
-                    <div style={styles.rowActions}>
-                      <button style={styles.rowActionBtn} onClick={() => handleEdit(event)} title="Edit">✏️</button>
-                      <button style={styles.rowActionBtn} onClick={() => toggleStatus(event.id)} title="Toggle Status">{event.status === "Active" ? "⏸️" : "▶️"}</button>
-                      <button style={{ ...styles.rowActionBtn, color: "#EF4444" }} onClick={() => setConfirmDelete(event.id)} title="Delete">🗑️</button>
+                    <StatusPill label={ev.status} />
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button onClick={() => handleEdit(ev)} style={{ width: 32, height: 32, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, cursor: "pointer", fontSize: "0.85rem", display: "flex", alignItems: "center", justifyContent: "center" }}>✏️</button>
+                      <button onClick={() => toggleStatus(ev.id)} style={{ width: 32, height: 32, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, cursor: "pointer", fontSize: "0.85rem", display: "flex", alignItems: "center", justifyContent: "center" }}>{ev.status === "Active" ? "⏸️" : "▶️"}</button>
+                      <button onClick={() => setConfirmDelete(ev.id)} style={{ width: 32, height: 32, background: "rgba(196,32,80,.06)", border: "1px solid rgba(196,32,80,.15)", borderRadius: 8, cursor: "pointer", fontSize: "0.85rem", display: "flex", alignItems: "center", justifyContent: "center" }}>🗑️</button>
                     </div>
                   </div>
                 ))}
@@ -285,48 +364,49 @@ export default function OrganizerDashboard() {
             </div>
           )}
 
-          {/* PARTICIPANTS TAB */}
+          {/* PARTICIPANTS */}
           {activeTab === "participants" && (
-            <div>
-              <div style={styles.eventsToolbar}>
-                <div style={styles.filterBtns}>
-                  {events.map(e => (
-                    <button key={e.id} style={{ ...styles.filterBtn, ...(selectedEvent?.id === e.id ? styles.filterBtnActive : {}) }} onClick={() => setSelectedEvent(e)}>{e.title.slice(0, 18)}...</button>
-                  ))}
-                  <button style={{ ...styles.filterBtn, ...(selectedEvent === null ? styles.filterBtnActive : {}) }} onClick={() => setSelectedEvent(null)}>All Events</button>
-                </div>
+            <div style={{ animation: "fadeUp .5s ease both" }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20 }}>
+                {events.map(e => (
+                  <button key={e.id} onClick={() => setSelectedEvent(e)}
+                    style={{ padding: "7px 16px", borderRadius: 100, border: selectedEvent?.id === e.id ? "none" : "1px solid var(--border)", background: selectedEvent?.id === e.id ? "var(--ink)" : "#fff", color: selectedEvent?.id === e.id ? "var(--cream)" : "var(--muted)", cursor: "pointer", fontSize: "0.78rem", fontFamily: "var(--ff-body)", fontWeight: 600, transition: "all .2s" }}>
+                    {e.title.slice(0, 20)}…
+                  </button>
+                ))}
+                <button onClick={() => setSelectedEvent(null)}
+                  style={{ padding: "7px 16px", borderRadius: 100, border: selectedEvent === null ? "none" : "1px solid var(--border)", background: selectedEvent === null ? "var(--ink)" : "#fff", color: selectedEvent === null ? "var(--cream)" : "var(--muted)", cursor: "pointer", fontSize: "0.78rem", fontFamily: "var(--ff-body)", fontWeight: 600, transition: "all .2s" }}>
+                  All Events
+                </button>
               </div>
-              <div style={styles.tableWrap}>
-                <table style={styles.table}>
+
+              <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 16, overflow: "hidden" }}>
+                <table style={{ width: "100%", fontSize: "0.85rem" }}>
                   <thead>
                     <tr>
-                      {["#", "Participant", "Email", "Event", "Status", "Registered On", "Actions"].map(h => (
-                        <th key={h} style={styles.th}>{h}</th>
+                      {["#","Participant","Email","Event","Status","Registered On","Actions"].map(h => (
+                        <th key={h} style={{ textAlign: "left", padding: "13px 20px", color: "var(--muted)", fontSize: "0.7rem", fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", background: "var(--surface)", borderBottom: "1px solid var(--border)" }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {participants.filter(p => !selectedEvent || p.event === selectedEvent.title).map((p, i) => (
-                      <tr key={p.id} style={styles.tr}>
-                        <td style={{ ...styles.td, color: "#64748B" }}>{i + 1}</td>
-                        <td style={styles.td}>
-                          <div style={styles.participantRow}>
-                            <div style={styles.pAvatar}>{p.name[0]}</div>
-                            {p.name}
+                    {participants.map((p, i) => (
+                      <tr key={p.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                        <td style={{ padding: "13px 20px", color: "var(--muted)" }}>{i+1}</td>
+                        <td style={{ padding: "13px 20px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <div style={{ width: 30, height: 30, borderRadius: "50%", background: "linear-gradient(135deg,var(--saffron),var(--saffron-g))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.7rem", fontWeight: 800, color: "#fff", flexShrink: 0 }}>{p.name[0]}</div>
+                            <span style={{ fontWeight: 600 }}>{p.name}</span>
                           </div>
                         </td>
-                        <td style={{ ...styles.td, color: "#64748B" }}>{p.email}</td>
-                        <td style={styles.td}>{p.event}</td>
-                        <td style={styles.td}>
-                          <span style={{ ...styles.statusPill, background: p.status === "Confirmed" ? "#10B98122" : p.status === "Waitlisted" ? "#F59E0B22" : "#6366F122", color: p.status === "Confirmed" ? "#10B981" : p.status === "Waitlisted" ? "#F59E0B" : "#6366F1" }}>
-                            {p.status}
-                          </span>
-                        </td>
-                        <td style={{ ...styles.td, color: "#64748B" }}>{p.joined}</td>
-                        <td style={styles.td}>
+                        <td style={{ padding: "13px 20px", color: "var(--muted)" }}>{p.email}</td>
+                        <td style={{ padding: "13px 20px" }}>{p.event}</td>
+                        <td style={{ padding: "13px 20px" }}><StatusPill label={p.status} /></td>
+                        <td style={{ padding: "13px 20px", color: "var(--muted)" }}>{p.joined}</td>
+                        <td style={{ padding: "13px 20px" }}>
                           <div style={{ display: "flex", gap: 8 }}>
-                            <button style={styles.rowActionBtn} title="Approve">✅</button>
-                            <button style={{ ...styles.rowActionBtn, color: "#EF4444" }} title="Remove">❌</button>
+                            <button style={{ width: 32, height: 32, background: "rgba(23,136,90,.08)", border: "1px solid rgba(23,136,90,.2)", borderRadius: 8, cursor: "pointer", fontSize: "0.85rem", display: "flex", alignItems: "center", justifyContent: "center" }}>✅</button>
+                            <button style={{ width: 32, height: 32, background: "rgba(196,32,80,.06)", border: "1px solid rgba(196,32,80,.15)", borderRadius: 8, cursor: "pointer", fontSize: "0.85rem", display: "flex", alignItems: "center", justifyContent: "center" }}>❌</button>
                           </div>
                         </td>
                       </tr>
@@ -337,207 +417,201 @@ export default function OrganizerDashboard() {
             </div>
           )}
 
-          {/* MESSAGES TAB */}
+          {/* MESSAGES */}
           {activeTab === "messages" && (
-            <div style={styles.msgWrap}>
-              <div style={styles.msgCard}>
-                <h2 style={styles.sectionTitle}>Broadcast to Participants</h2>
-                <p style={{ color: "#64748B", fontSize: 14, marginBottom: 20 }}>Send announcements, updates, or reminders to all registered participants.</p>
-                <label style={styles.formLabel}>Select Event</label>
-                <select style={styles.formSelect}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 24, animation: "fadeUp .5s ease both" }}>
+              <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 20, padding: 28 }}>
+                <h2 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1.2rem", marginBottom: 6 }}>Broadcast to Participants</h2>
+                <p style={{ color: "var(--muted)", fontSize: "0.82rem", marginBottom: 22 }}>Send announcements, updates, or reminders to registered participants.</p>
+
+                <label style={labelStyle}>Select Event</label>
+                <select style={inputStyle}>
                   <option value="">All Events</option>
                   {events.map(e => <option key={e.id} value={e.id}>{e.title}</option>)}
                 </select>
-                <label style={styles.formLabel}>Message Type</label>
-                <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
-                  {["Announcement", "Reminder", "Update", "Cancellation"].map(t => (
-                    <button key={t} style={styles.msgTypeBtn}>{t}</button>
+
+                <label style={labelStyle}>Message Type</label>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
+                  {["Announcement","Reminder","Update","Cancellation"].map(t => (
+                    <button key={t} onClick={() => setMsgType(t)} style={{ padding: "7px 16px", borderRadius: 100, border: "1px solid var(--border)", background: msgType === t ? "var(--ink)" : "#fff", color: msgType === t ? "var(--cream)" : "var(--muted)", cursor: "pointer", fontSize: "0.78rem", fontFamily: "var(--ff-body)", fontWeight: 600, transition: "all .2s" }}>{t}</button>
                   ))}
                 </div>
-                <label style={styles.formLabel}>Subject</label>
-                <input style={styles.formInput} placeholder="Message subject..." />
-                <label style={styles.formLabel}>Message</label>
-                <textarea
-                  style={{ ...styles.formInput, height: 120, resize: "vertical" }}
-                  placeholder="Write your message to participants..."
-                  value={msgText}
-                  onChange={e => setMsgText(e.target.value)}
-                />
-                <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
-                  <button style={styles.sendBtn} onClick={sendMessage}>
+
+                <label style={labelStyle}>Subject</label>
+                <input style={inputStyle} placeholder="Message subject…" value={msgSubject} onChange={e => setMsgSubject(e.target.value)} />
+
+                <label style={labelStyle}>Message</label>
+                <textarea style={{ ...inputStyle, height: 120, resize: "vertical" }} placeholder="Write your message to participants…" value={msgText} onChange={e => setMsgText(e.target.value)} />
+
+                <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+                  <button onClick={sendMessage} style={{ padding: "11px 26px", background: "var(--ink)", color: "var(--cream)", border: "none", borderRadius: 100, fontFamily: "var(--ff-body)", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer" }}>
                     {msgSent ? "✓ Sent!" : "📤 Send Broadcast"}
                   </button>
-                  <button style={styles.scheduleBtn}>🕒 Schedule</button>
+                  <button style={{ padding: "11px 20px", background: "transparent", border: "1px solid var(--border)", borderRadius: 100, color: "var(--muted)", cursor: "pointer", fontSize: "0.85rem", fontFamily: "var(--ff-body)" }}>🕒 Schedule</button>
                 </div>
-                {msgSent && <div style={styles.successMsg}>✅ Message sent to all participants!</div>}
+                {msgSent && <div style={{ marginTop: 14, padding: "10px 18px", background: "rgba(23,136,90,.08)", color: "var(--sage)", borderRadius: 12, fontSize: "0.82rem", border: "1px solid rgba(23,136,90,.2)" }}>✅ Message sent to all participants!</div>}
               </div>
-              <div style={styles.msgHistory}>
-                <h3 style={styles.sectionTitle}>Message History</h3>
-                {[
-                  { title: "Marathon Route Update", event: "City Marathon 2026", sent: "Apr 8 · 2:30 PM", recipients: 188 },
-                  { title: "Festival Schedule Released", event: "Literary Festival 2026", sent: "Apr 6 · 10:00 AM", recipients: 312 },
-                ].map((m, i) => (
-                  <div key={i} style={styles.msgHistoryRow}>
-                    <div style={styles.msgHistIcon}>📨</div>
+
+              <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 20, padding: 24 }}>
+                <h3 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1rem", marginBottom: 18 }}>Message History</h3>
+                {broadcasts.map((m, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 0", borderBottom: "1px solid var(--border)" }}>
+                    <div style={{ width: 38, height: 38, borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1rem" }}>📨</div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: "#F1F5F9" }}>{m.title}</div>
-                      <div style={{ fontSize: 12, color: "#64748B" }}>{m.event} · {m.sent}</div>
+                      <div style={{ fontSize: "0.85rem", fontWeight: 600 }}>{m.subject}</div>
+                      <div style={{ fontSize: "0.72rem", color: "var(--muted)" }}>{m.event_title || "All Events"} · {new Date(m.sent_at).toLocaleDateString()}</div>
                     </div>
-                    <div style={{ fontSize: 12, color: "#94A3B8" }}>👥 {m.recipients}</div>
+                    <div style={{ fontSize: "0.72rem", color: "var(--muted)" }}>{m.type}</div>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* ANALYTICS TAB */}
+          {/* ANALYTICS */}
           {activeTab === "analytics" && (
-            <div>
-              <div style={styles.statsGrid}>
+            <div style={{ animation: "fadeUp .5s ease both" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 32 }}>
                 {[
-                  { label: "Total Views", value: "2,847", icon: "👁️", color: "#6366F1" },
-                  { label: "Conversion Rate", value: "34%", icon: "📈", color: "#10B981" },
-                  { label: "Avg. Fill Rate", value: "78%", icon: "🎯", color: "#F59E0B" },
-                  { label: "Repeat Attendees", value: "41%", icon: "🔁", color: "#EC4899" },
+                  { label: "Total Views", value: "2,847", color: "var(--indigo)" },
+                  { label: "Conversion Rate", value: "34%", color: "var(--sage)" },
+                  { label: "Avg. Fill Rate", value: "78%", color: "var(--saffron)" },
+                  { label: "Repeat Attendees", value: "41%", color: "#8b2fcc" },
                 ].map((s, i) => (
-                  <div key={i} style={{ ...styles.statCard, borderLeft: `4px solid ${s.color}` }}>
-                    <div style={styles.statTop}>
-                      <div>
-                        <div style={styles.statLabel}>{s.label}</div>
-                        <div style={{ ...styles.statValue, color: s.color }}>{s.value}</div>
-                      </div>
-                      <div style={{ ...styles.statIcon, background: `${s.color}22` }}>{s.icon}</div>
-                    </div>
+                  <div key={i} style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 16, padding: "20px 22px", borderTop: `3px solid ${s.color}` }}>
+                    <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 8 }}>{s.label}</div>
+                    <div style={{ fontFamily: "var(--ff-display)", fontSize: "2rem", fontWeight: 900, color: s.color }}>{s.value}</div>
                   </div>
                 ))}
               </div>
-              <div style={{ marginTop: 24 }}>
-                <h2 style={styles.sectionTitle}>Event Performance</h2>
-                <div style={styles.analyticsCards}>
-                  {events.map(event => (
-                    <div key={event.id} style={styles.analyticsCard}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-                        <span style={{ fontSize: 28 }}>{event.image}</span>
-                        <div>
-                          <div style={{ fontSize: 14, fontWeight: 700, color: "#F1F5F9" }}>{event.title}</div>
-                          <div style={{ fontSize: 12, color: "#64748B" }}>{event.category}</div>
-                        </div>
-                      </div>
-                      <div style={styles.analyticsStats}>
-                        {[["Registered", event.registered], ["Capacity", event.capacity], ["Fill %", Math.round((event.registered / event.capacity) * 100) + "%"]].map(([l, v]) => (
-                          <div key={l} style={styles.analyticsStat}>
-                            <div style={{ fontSize: 18, fontWeight: 800, color: event.color, fontFamily: "'Syne', sans-serif" }}>{v}</div>
-                            <div style={{ fontSize: 11, color: "#64748B" }}>{l}</div>
-                          </div>
-                        ))}
-                      </div>
-                      <div style={styles.progressBar}>
-                        <div style={{ ...styles.progressFill, width: `${Math.min((event.registered / event.capacity) * 100, 100)}%`, background: event.color }} />
+
+              <h2 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1.2rem", marginBottom: 18 }}>Event Performance</h2>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 18 }}>
+                {events.map(ev => (
+                  <div key={ev.id} style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 18, padding: 22 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
+                      <div style={{ width: 48, height: 48, borderRadius: 14, background: ev.grad, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.5rem" }}>{ev.image}</div>
+                      <div>
+                        <div style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "0.9rem" }}>{ev.title}</div>
+                        <div style={{ fontSize: "0.72rem", color: "var(--muted)" }}>{ev.category}</div>
                       </div>
                     </div>
-                  ))}
-                </div>
+                    <div style={{ display: "flex", gap: 18, marginBottom: 14 }}>
+                      {[["Registered", ev.registered], ["Capacity", ev.capacity], ["Fill %", Math.round((ev.registered / ev.capacity) * 100) + "%"]].map(([l, v]) => (
+                        <div key={l}>
+                          <div style={{ fontFamily: "var(--ff-display)", fontSize: "1.3rem", fontWeight: 700, color: ev.color }}>{v}</div>
+                          <div style={{ fontSize: "0.68rem", color: "var(--muted)", marginTop: 2 }}>{l}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ height: 6, background: "var(--surface)", borderRadius: 3, overflow: "hidden" }}>
+                      <div style={{ width: `${Math.min((ev.registered / ev.capacity) * 100, 100)}%`, height: "100%", background: ev.grad, borderRadius: 3 }}/>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
 
-          {/* SETTINGS TAB */}
+          {/* SETTINGS */}
           {activeTab === "settings" && (
-            <div style={styles.settingsWrap}>
-              <div style={styles.settingsCard}>
-                <h3 style={styles.sectionTitle}>Organizer Profile</h3>
-                <div style={styles.profileAvatarBig}>RS</div>
-                {[["Full Name", "Rohit Sharma"], ["Email", "rohit.sharma@organizer.com"], ["Phone", "+91 9876543210"], ["Organization", "CommuniHub Events"], ["City", "Dhanbad, Jharkhand"]].map(([l, v]) => (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, animation: "fadeUp .5s ease both" }}>
+              <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 20, padding: 28 }}>
+                <h3 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1.1rem", marginBottom: 20 }}>Organizer Profile</h3>
+                <div style={{ width: 72, height: 72, borderRadius: "50%", background: "linear-gradient(135deg,#f4a023,#e85d04)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.4rem", fontWeight: 900, color: "#fff", margin: "0 auto 24px" }}>RS</div>
+                {[["Full Name","Rohit Sharma"],["Email","rohit.sharma@organizer.com"],["Phone","+91 9876543210"],["Organization","CommuniHub Events"],["City","Dhanbad, Jharkhand"]].map(([l, v]) => (
                   <div key={l} style={{ marginBottom: 14 }}>
-                    <label style={styles.formLabel}>{l}</label>
-                    <input style={styles.formInput} defaultValue={v} />
+                    <label style={labelStyle}>{l}</label>
+                    <input style={inputStyle} defaultValue={v} />
                   </div>
                 ))}
-                <button style={styles.sendBtn}>Save Changes</button>
+                <button style={{ marginTop: 6, width: "100%", padding: "11px", background: "var(--ink)", border: "none", borderRadius: 100, color: "var(--cream)", cursor: "pointer", fontWeight: 700, fontSize: "0.88rem", fontFamily: "var(--ff-body)" }}>Save Changes →</button>
               </div>
-              <div style={styles.settingsCard}>
-                <h3 style={styles.sectionTitle}>Notification Preferences</h3>
-                {[
-                  "Email on new registration",
-                  "SMS alerts for capacity warnings",
-                  "Daily summary report",
-                  "Participant message notifications",
-                  "Event reminder alerts",
-                ].map((pref, i) => (
-                  <div key={i} style={styles.toggleRow}>
-                    <span style={{ fontSize: 14, color: "#E2E8F0" }}>{pref}</span>
-                    <div style={{ ...styles.toggleSwitch, background: i < 3 ? "#6366F1" : "#2D3148" }}>
-                      <div style={{ ...styles.toggleThumb, left: i < 3 ? 22 : 3 }} />
+
+              <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 20, padding: 28 }}>
+                <h3 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1.1rem", marginBottom: 20 }}>Notification Preferences</h3>
+                {["Email on new registration","SMS alerts for capacity warnings","Daily summary report","Participant message notifications","Event reminder alerts"].map((pref, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 0", borderBottom: "1px solid var(--border)" }}>
+                    <span style={{ fontSize: "0.88rem" }}>{pref}</span>
+                    <div style={{ width: 46, height: 24, borderRadius: 12, background: i < 3 ? "var(--ink)" : "var(--border)", position: "relative", cursor: "pointer", transition: "background .2s" }}>
+                      <div style={{ width: 18, height: 18, borderRadius: "50%", background: "#fff", position: "absolute", top: 3, left: i < 3 ? 25 : 3, transition: "left .2s" }}/>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
           )}
+
         </div>
       </main>
 
       {/* CREATE/EDIT MODAL */}
-      {showCreateModal && (
-        <div style={styles.modalOverlay} onClick={() => setShowCreateModal(false)}>
-          <div style={styles.modal} onClick={e => e.stopPropagation()}>
-            <div style={styles.modalHeader}>
-              <h2 style={styles.sectionTitle}>{editingId ? "Edit Event" : "Create New Event"}</h2>
-              <button style={styles.modalClose} onClick={() => setShowCreateModal(false)}>✕</button>
+      {showModal && (
+        <div onClick={() => setShowModal(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(12,12,20,.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, backdropFilter: "blur(4px)" }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 24, width: "90%", maxWidth: 580, maxHeight: "90vh", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 32px 80px rgba(0,0,0,.2)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "22px 28px", borderBottom: "1px solid var(--border)" }}>
+              <h2 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1.2rem" }}>{editingId ? "Edit Event" : "Create New Event"}</h2>
+              <button onClick={() => setShowModal(false)} style={{ background: "transparent", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: "1.1rem", width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
             </div>
-            <div style={styles.modalBody}>
-              <div style={styles.formRow}>
+            <div style={{ padding: "6px 28px 20px", overflowY: "auto", flex: 1 }}>
+              <div style={{ display: "flex", gap: 12 }}>
                 <div style={{ flex: 1 }}>
-                  <label style={styles.formLabel}>Event Title *</label>
-                  <input style={styles.formInput} placeholder="e.g. City Marathon 2026" value={form.title} onChange={e => handleFormChange("title", e.target.value)} />
+                  <label style={labelStyle}>Event Title *</label>
+                  <input style={inputStyle} placeholder="e.g. City Marathon 2026" value={form.title} onChange={e => handleFormChange("title", e.target.value)} />
                 </div>
                 <div>
-                  <label style={styles.formLabel}>Category</label>
-                  <select style={styles.formSelect} value={form.category} onChange={e => handleFormChange("category", e.target.value)}>
+                  <label style={labelStyle}>Category</label>
+                  <select style={inputStyle} value={form.category} onChange={e => handleFormChange("category", e.target.value)}>
                     {categories.map(c => <option key={c}>{c}</option>)}
                   </select>
                 </div>
               </div>
-              <div style={styles.formRow}>
+              <div style={{ display: "flex", gap: 12 }}>
                 <div>
-                  <label style={styles.formLabel}>Date *</label>
-                  <input type="date" style={styles.formInput} value={form.date} onChange={e => handleFormChange("date", e.target.value)} />
+                  <label style={labelStyle}>Date *</label>
+                  <input type="date" style={inputStyle} value={form.date} onChange={e => handleFormChange("date", e.target.value)} />
                 </div>
                 <div>
-                  <label style={styles.formLabel}>Time</label>
-                  <input type="time" style={styles.formInput} value={form.time} onChange={e => handleFormChange("time", e.target.value)} />
+                  <label style={labelStyle}>Time</label>
+                  <input type="time" style={inputStyle} value={form.time} onChange={e => handleFormChange("time", e.target.value)} />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <label style={styles.formLabel}>Capacity</label>
-                  <input type="number" style={styles.formInput} placeholder="100" value={form.capacity} onChange={e => handleFormChange("capacity", e.target.value)} />
+                  <label style={labelStyle}>Capacity</label>
+                  <input type="number" style={inputStyle} placeholder="100" value={form.capacity} onChange={e => handleFormChange("capacity", e.target.value)} />
                 </div>
               </div>
-              <label style={styles.formLabel}>Location *</label>
-              <input style={styles.formInput} placeholder="Venue / Address" value={form.location} onChange={e => handleFormChange("location", e.target.value)} />
-              <label style={styles.formLabel}>Description</label>
-              <textarea style={{ ...styles.formInput, height: 80, resize: "vertical" }} placeholder="Brief description..." value={form.description} onChange={e => handleFormChange("description", e.target.value)} />
-              <div style={styles.formRow}>
+              <label style={labelStyle}>Location *</label>
+              <input style={inputStyle} placeholder="Venue / Address" value={form.location} onChange={e => handleFormChange("location", e.target.value)} />
+              <label style={labelStyle}>Description</label>
+              <textarea style={{ ...inputStyle, height: 72, resize: "vertical" }} placeholder="Brief description…" value={form.description} onChange={e => handleFormChange("description", e.target.value)} />
+              <div style={{ display: "flex", gap: 24 }}>
                 <div>
-                  <label style={styles.formLabel}>Event Icon</label>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 6 }}>
+                  <label style={labelStyle}>Event Icon</label>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
                     {emojiOptions.map(em => (
-                      <button key={em} style={{ ...styles.emojiBtn, ...(form.image === em ? styles.emojiBtnActive : {}) }} onClick={() => handleFormChange("image", em)}>{em}</button>
+                      <button key={em} onClick={() => handleFormChange("image", em)}
+                        style={{ width: 36, height: 36, borderRadius: 10, border: form.image === em ? "2px solid var(--saffron)" : "1px solid var(--border)", background: form.image === em ? "rgba(244,160,35,.1)" : "var(--surface)", cursor: "pointer", fontSize: "1.1rem", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        {em}
+                      </button>
                     ))}
                   </div>
                 </div>
                 <div>
-                  <label style={styles.formLabel}>Color</label>
+                  <label style={labelStyle}>Color</label>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 6 }}>
                     {colorOptions.map(c => (
-                      <button key={c} style={{ width: 28, height: 28, borderRadius: "50%", background: c, border: form.color === c ? "3px solid #fff" : "3px solid transparent", cursor: "pointer" }} onClick={() => handleFormChange("color", c)} />
+                      <button key={c.hex} onClick={() => { handleFormChange("color", c.hex); handleFormChange("grad", c.grad); }}
+                        style={{ width: 30, height: 30, borderRadius: "50%", background: c.grad, border: form.color === c.hex ? "3px solid var(--ink)" : "3px solid transparent", cursor: "pointer", transition: "border .2s" }} />
                     ))}
                   </div>
                 </div>
               </div>
             </div>
-            <div style={styles.modalFooter}>
-              <button style={styles.cancelModalBtn} onClick={() => setShowCreateModal(false)}>Cancel</button>
-              <button style={styles.sendBtn} onClick={handleCreateOrEdit}>{editingId ? "Save Changes" : "Create Event"}</button>
+            <div style={{ display: "flex", gap: 10, padding: "18px 28px", borderTop: "1px solid var(--border)", justifyContent: "flex-end" }}>
+              <button onClick={() => setShowModal(false)} style={{ padding: "10px 22px", background: "transparent", border: "1px solid var(--border)", borderRadius: 100, color: "var(--muted)", cursor: "pointer", fontSize: "0.85rem", fontFamily: "var(--ff-body)" }}>Cancel</button>
+              <button onClick={handleCreateOrEdit} style={{ padding: "10px 26px", background: "var(--ink)", border: "none", borderRadius: 100, color: "var(--cream)", cursor: "pointer", fontWeight: 700, fontSize: "0.85rem", fontFamily: "var(--ff-body)" }}>{editingId ? "Save Changes" : "Create Event →"}</button>
             </div>
           </div>
         </div>
@@ -545,133 +619,22 @@ export default function OrganizerDashboard() {
 
       {/* DELETE CONFIRM */}
       {confirmDelete && (
-        <div style={styles.modalOverlay} onClick={() => setConfirmDelete(null)}>
-          <div style={{ ...styles.modal, maxWidth: 380 }} onClick={e => e.stopPropagation()}>
-            <div style={styles.modalHeader}>
-              <h2 style={styles.sectionTitle}>Delete Event?</h2>
-              <button style={styles.modalClose} onClick={() => setConfirmDelete(null)}>✕</button>
+        <div onClick={() => setConfirmDelete(null)}
+          style={{ position: "fixed", inset: 0, background: "rgba(12,12,20,.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, backdropFilter: "blur(4px)" }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 20, width: "90%", maxWidth: 380, boxShadow: "0 24px 60px rgba(0,0,0,.18)", overflow: "hidden" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid var(--border)" }}>
+              <h2 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1.1rem" }}>Delete Event?</h2>
+              <button onClick={() => setConfirmDelete(null)} style={{ background: "transparent", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: "1.1rem" }}>✕</button>
             </div>
-            <p style={{ padding: "16px 24px", color: "#94A3B8", fontSize: 14 }}>This will permanently delete the event and all registrations. This cannot be undone.</p>
-            <div style={{ ...styles.modalFooter }}>
-              <button style={styles.cancelModalBtn} onClick={() => setConfirmDelete(null)}>Cancel</button>
-              <button style={{ ...styles.sendBtn, background: "#EF4444" }} onClick={() => handleDelete(confirmDelete)}>Delete</button>
+            <p style={{ padding: "18px 24px", color: "var(--muted)", fontSize: "0.88rem", lineHeight: 1.6 }}>This will permanently delete the event and all registrations. This action cannot be undone.</p>
+            <div style={{ display: "flex", gap: 10, padding: "16px 24px", borderTop: "1px solid var(--border)", justifyContent: "flex-end" }}>
+              <button onClick={() => setConfirmDelete(null)} style={{ padding: "10px 20px", background: "transparent", border: "1px solid var(--border)", borderRadius: 100, color: "var(--muted)", cursor: "pointer", fontSize: "0.85rem", fontFamily: "var(--ff-body)" }}>Cancel</button>
+              <button onClick={() => handleDelete(confirmDelete)} style={{ padding: "10px 22px", background: "#c42050", border: "none", borderRadius: 100, color: "#fff", cursor: "pointer", fontWeight: 700, fontSize: "0.85rem", fontFamily: "var(--ff-body)" }}>Delete</button>
             </div>
           </div>
         </div>
       )}
-
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap');
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'DM Sans', sans-serif; background: #0F1117; }
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #1A1D27; }
-        ::-webkit-scrollbar-thumb { background: #2D3148; border-radius: 3px; }
-        table { border-collapse: collapse; }
-      `}</style>
     </div>
   );
 }
-
-const styles = {
-  root: { display: "flex", minHeight: "100vh", background: "#0F1117", fontFamily: "'DM Sans', sans-serif", color: "#E2E8F0" },
-  sidebar: { width: 240, background: "#13151F", borderRight: "1px solid #1E2235", display: "flex", flexDirection: "column", position: "sticky", top: 0, height: "100vh", padding: "24px 0" },
-  logo: { display: "flex", alignItems: "center", gap: 10, padding: "0 24px 12px" },
-  logoIcon: { width: 36, height: 36, background: "linear-gradient(135deg, #F59E0B, #FF6B35)", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 },
-  logoText: { fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 20, background: "linear-gradient(135deg, #F59E0B, #FF6B35)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" },
-  orgBadge: { margin: "0 16px 20px", padding: "5px 12px", background: "#F59E0B22", color: "#F59E0B", borderRadius: 8, fontSize: 11, fontWeight: 700, textAlign: "center", borderBottom: "1px solid #1E2235" },
-  nav: { flex: 1, padding: "4px 12px", display: "flex", flexDirection: "column", gap: 4 },
-  navItem: { display: "flex", alignItems: "center", gap: 12, padding: "11px 14px", borderRadius: 10, border: "none", background: "transparent", color: "#94A3B8", cursor: "pointer", fontSize: 14, fontFamily: "'DM Sans', sans-serif", fontWeight: 500, textAlign: "left", transition: "all 0.2s" },
-  navItemActive: { background: "linear-gradient(135deg, #F59E0B22, #FF6B3522)", color: "#F59E0B", borderLeft: "3px solid #F59E0B" },
-  navIcon: { fontSize: 18 },
-  sidebarFooter: { padding: "20px 16px", borderTop: "1px solid #1E2235" },
-  avatarRow: { display: "flex", alignItems: "center", gap: 10 },
-  avatarSmall: { width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, #F59E0B, #FF6B35)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "#fff", cursor: "pointer", flexShrink: 0 },
-  avatarName: { fontSize: 13, fontWeight: 600, color: "#E2E8F0" },
-  avatarRole: { fontSize: 11, color: "#64748B" },
-  main: { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" },
-  topbar: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 32px", borderBottom: "1px solid #1E2235", background: "#13151F", position: "sticky", top: 0, zIndex: 10 },
-  pageTitle: { fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 24, color: "#F1F5F9" },
-  pageSubtitle: { fontSize: 13, color: "#64748B", marginTop: 2 },
-  topbarRight: { display: "flex", alignItems: "center", gap: 12 },
-  searchWrap: { display: "flex", alignItems: "center", background: "#1A1D27", border: "1px solid #2D3148", borderRadius: 10, padding: "0 14px", gap: 8 },
-  searchInput: { background: "transparent", border: "none", outline: "none", color: "#E2E8F0", fontSize: 14, padding: "10px 0", width: 180, fontFamily: "'DM Sans', sans-serif" },
-  createBtn: { padding: "10px 20px", background: "linear-gradient(135deg, #F59E0B, #FF6B35)", border: "none", borderRadius: 10, color: "#fff", cursor: "pointer", fontWeight: 700, fontSize: 14, fontFamily: "'DM Sans', sans-serif" },
-  content: { flex: 1, padding: "28px 32px", overflowY: "auto" },
-  statsGrid: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 },
-  statCard: { background: "#13151F", border: "1px solid #1E2235", borderRadius: 14, padding: "20px" },
-  statTop: { display: "flex", justifyContent: "space-between", alignItems: "flex-start" },
-  statLabel: { fontSize: 12, color: "#64748B", marginBottom: 4 },
-  statValue: { fontSize: 28, fontFamily: "'Syne', sans-serif", fontWeight: 800 },
-  statSub: { fontSize: 11, color: "#64748B", marginTop: 4 },
-  statIcon: { width: 44, height: 44, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 },
-  sectionHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
-  sectionTitle: { fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 18, color: "#F1F5F9" },
-  viewAllBtn: { background: "transparent", border: "none", color: "#F59E0B", cursor: "pointer", fontSize: 14, fontFamily: "'DM Sans', sans-serif" },
-  eventsGrid: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 18 },
-  eventCard: { background: "#13151F", border: "1px solid #1E2235", borderRadius: 16, overflow: "hidden" },
-  eventTop: { padding: "20px", display: "flex", alignItems: "flex-start", justifyContent: "space-between" },
-  statusPill: { padding: "4px 12px", borderRadius: 20, fontSize: 11, fontWeight: 600 },
-  eventBody: { padding: "0 18px 18px" },
-  eventTitle: { fontSize: 15, fontWeight: 700, color: "#F1F5F9", fontFamily: "'Syne', sans-serif", marginBottom: 8 },
-  eventMeta: { display: "flex", flexDirection: "column", gap: 3, fontSize: 12, color: "#64748B", marginBottom: 12 },
-  progressWrap: { marginBottom: 14 },
-  progressHeader: { display: "flex", justifyContent: "space-between", marginBottom: 6 },
-  progressBar: { width: "100%", height: 6, background: "#1E2235", borderRadius: 3, overflow: "hidden" },
-  progressFill: { height: "100%", borderRadius: 3, transition: "width 0.5s ease" },
-  cardActions: { display: "flex", gap: 8 },
-  editBtn: { flex: 1, padding: "8px", background: "#1E2235", border: "1px solid #2D3148", borderRadius: 8, color: "#E2E8F0", cursor: "pointer", fontSize: 12, fontFamily: "'DM Sans', sans-serif" },
-  viewBtn: { flex: 1, padding: "8px", background: "#F59E0B22", border: "1px solid #F59E0B44", borderRadius: 8, color: "#F59E0B", cursor: "pointer", fontSize: 12, fontFamily: "'DM Sans', sans-serif" },
-  tableWrap: { background: "#13151F", border: "1px solid #1E2235", borderRadius: 14, overflow: "hidden" },
-  table: { width: "100%", fontSize: 14 },
-  th: { textAlign: "left", padding: "14px 20px", color: "#64748B", fontSize: 12, fontWeight: 600, background: "#1A1D27", borderBottom: "1px solid #1E2235" },
-  tr: { borderBottom: "1px solid #1E2235" },
-  td: { padding: "14px 20px", color: "#E2E8F0", fontSize: 13 },
-  participantRow: { display: "flex", alignItems: "center", gap: 10 },
-  pAvatar: { width: 30, height: 30, borderRadius: "50%", background: "linear-gradient(135deg, #6366F1, #A78BFA)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#fff", flexShrink: 0 },
-  eventsToolbar: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 },
-  filterBtns: { display: "flex", gap: 8, flexWrap: "wrap" },
-  filterBtn: { padding: "7px 14px", borderRadius: 8, border: "1px solid #2D3148", background: "transparent", color: "#94A3B8", cursor: "pointer", fontSize: 12, fontFamily: "'DM Sans', sans-serif" },
-  filterBtnActive: { background: "linear-gradient(135deg, #F59E0B, #FF6B35)", color: "#fff", border: "1px solid transparent" },
-  eventsTable: { display: "flex", flexDirection: "column", gap: 10 },
-  eventTableRow: { display: "flex", alignItems: "center", gap: 14, background: "#13151F", border: "1px solid #1E2235", borderRadius: 12, padding: "14px 18px" },
-  eventRowIcon: { width: 44, height: 44, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0 },
-  eventRowInfo: { flex: 1 },
-  eventRowTitle: { fontSize: 14, fontWeight: 600, color: "#F1F5F9" },
-  eventRowMeta: { fontSize: 12, color: "#64748B", marginTop: 3 },
-  progressCompact: { width: 120, display: "flex", flexDirection: "column", gap: 4 },
-  rowActions: { display: "flex", gap: 6 },
-  rowActionBtn: { background: "transparent", border: "1px solid #2D3148", borderRadius: 6, width: 32, height: 32, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" },
-  msgWrap: { display: "grid", gridTemplateColumns: "1fr 380px", gap: 24 },
-  msgCard: { background: "#13151F", border: "1px solid #1E2235", borderRadius: 16, padding: 24 },
-  msgTypeBtn: { padding: "7px 14px", borderRadius: 8, border: "1px solid #2D3148", background: "#1A1D27", color: "#94A3B8", cursor: "pointer", fontSize: 12, fontFamily: "'DM Sans', sans-serif" },
-  formLabel: { display: "block", fontSize: 12, color: "#64748B", fontWeight: 600, marginBottom: 6, marginTop: 14 },
-  formInput: { width: "100%", padding: "10px 14px", background: "#1A1D27", border: "1px solid #2D3148", borderRadius: 10, color: "#E2E8F0", fontSize: 14, outline: "none", fontFamily: "'DM Sans', sans-serif" },
-  formSelect: { width: "100%", padding: "10px 14px", background: "#1A1D27", border: "1px solid #2D3148", borderRadius: 10, color: "#E2E8F0", fontSize: 14, outline: "none", fontFamily: "'DM Sans', sans-serif" },
-  sendBtn: { padding: "11px 24px", background: "linear-gradient(135deg, #F59E0B, #FF6B35)", border: "none", borderRadius: 10, color: "#fff", cursor: "pointer", fontWeight: 700, fontSize: 14, fontFamily: "'DM Sans', sans-serif" },
-  scheduleBtn: { padding: "11px 20px", background: "transparent", border: "1px solid #2D3148", borderRadius: 10, color: "#94A3B8", cursor: "pointer", fontSize: 14, fontFamily: "'DM Sans', sans-serif" },
-  successMsg: { marginTop: 12, padding: "10px 16px", background: "#10B98122", color: "#10B981", borderRadius: 10, fontSize: 13 },
-  msgHistory: { background: "#13151F", border: "1px solid #1E2235", borderRadius: 16, padding: 24 },
-  msgHistoryRow: { display: "flex", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: "1px solid #1E2235" },
-  msgHistIcon: { width: 36, height: 36, borderRadius: 10, background: "#1E2235", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 },
-  analyticsCards: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 18, marginTop: 14 },
-  analyticsCard: { background: "#13151F", border: "1px solid #1E2235", borderRadius: 14, padding: 20 },
-  analyticsStats: { display: "flex", gap: 16, marginBottom: 14 },
-  analyticsStat: { textAlign: "center" },
-  settingsWrap: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 },
-  settingsCard: { background: "#13151F", border: "1px solid #1E2235", borderRadius: 16, padding: 24 },
-  profileAvatarBig: { width: 72, height: 72, borderRadius: "50%", background: "linear-gradient(135deg, #F59E0B, #FF6B35)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, fontWeight: 800, color: "#fff", margin: "16px auto 20px" },
-  toggleRow: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 0", borderBottom: "1px solid #1E2235" },
-  toggleSwitch: { width: 46, height: 24, borderRadius: 12, position: "relative", cursor: "pointer", transition: "background 0.2s" },
-  toggleThumb: { width: 18, height: 18, borderRadius: "50%", background: "#fff", position: "absolute", top: 3, transition: "left 0.2s" },
-  modalOverlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, backdropFilter: "blur(4px)" },
-  modal: { background: "#13151F", border: "1px solid #2D3148", borderRadius: 20, width: "90%", maxWidth: 580, maxHeight: "90vh", overflow: "hidden", display: "flex", flexDirection: "column" },
-  modalHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid #1E2235" },
-  modalClose: { background: "transparent", border: "none", color: "#64748B", cursor: "pointer", fontSize: 18 },
-  modalBody: { padding: "20px 24px", overflowY: "auto", flex: 1 },
-  modalFooter: { display: "flex", gap: 10, padding: "16px 24px", borderTop: "1px solid #1E2235", justifyContent: "flex-end" },
-  formRow: { display: "flex", gap: 12, marginBottom: 4 },
-  cancelModalBtn: { padding: "10px 20px", background: "transparent", border: "1px solid #2D3148", borderRadius: 10, color: "#94A3B8", cursor: "pointer", fontSize: 14, fontFamily: "'DM Sans', sans-serif" },
-  emojiBtn: { width: 36, height: 36, borderRadius: 8, border: "1px solid #2D3148", background: "#1A1D27", cursor: "pointer", fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center" },
-  emojiBtnActive: { border: "2px solid #F59E0B", background: "#F59E0B22" },
-};
