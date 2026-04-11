@@ -54,35 +54,34 @@ const GLOBAL_CSS = `
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
     --ink: #0c0c14;
-    --cream: #faf8f3;
+    --cream: #f8f7f4;
     --saffron: #f4a023;
     --saffron-g: #e8850d;
     --indigo: #3d3bf5;
     --rose: #c42050;
     --sage: #17885a;
-    --muted: #7a7890;
-    --border: #ece9f0;
-    --surface: #f5f3ee;
+    --muted: #8a8aa0;
+    --border: #edeaf4;
+    --surface: #f3f1ec;
     --ff-display: 'Playfair Display', Georgia, serif;
     --ff-body: 'DM Sans', system-ui, sans-serif;
-    --shadow-sm: 0 1px 4px rgba(0,0,0,.06);
-    --shadow-md: 0 4px 20px rgba(0,0,0,.08);
-    --shadow-lg: 0 12px 40px rgba(0,0,0,.12);
-    --radius: 16px;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,.05);
+    --shadow-md: 0 4px 16px rgba(0,0,0,.07);
+    --shadow-lg: 0 12px 40px rgba(0,0,0,.1);
+    --radius: 14px;
   }
   body { font-family: var(--ff-body); background: var(--cream); color: var(--ink); }
-  @keyframes fadeUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
   @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
-  @keyframes pulse-dot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.5; transform:scale(1.5); } }
-  .org-nav-btn:hover { background: rgba(244,160,35,.06) !important; color: var(--ink) !important; }
+  @keyframes pulse-dot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.4; transform:scale(1.6); } }
+  .org-nav-btn:hover { background: rgba(244,160,35,.07) !important; color: var(--ink) !important; }
+  .org-card { transition: box-shadow .2s, transform .2s; }
   .org-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
-  .org-card { transition: box-shadow .25s, transform .25s; }
   .org-row:hover { background: #fdfcfa !important; }
-  .org-action-btn:hover { opacity: .8; transform: scale(1.08); }
   .org-action-btn { transition: opacity .15s, transform .15s; }
-  .org-pill-btn:hover { box-shadow: 0 2px 8px rgba(0,0,0,.1); }
-  ::-webkit-scrollbar { width: 5px; }
-  ::-webkit-scrollbar-track { background: var(--surface); }
+  .org-action-btn:hover { opacity: .75; transform: scale(1.08); }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
   table { border-collapse: collapse; }
 `;
@@ -168,10 +167,13 @@ export default function OrganizerDashboard({ user, onLogout }) {
 
   useEffect(() => {
     if (selectedEvent) {
-      registrationsAPI.getParticipants(selectedEvent.id).then(setParticipants).catch(console.error);
+      registrationsAPI.getParticipants(selectedEvent.id)
+        .then(data => setParticipants(data.map(p => ({ ...p, event_id: selectedEvent.id }))))
+        .catch(console.error);
     } else {
-      // load all participants across all events
-      Promise.all(events.map(e => registrationsAPI.getParticipants(e.id)))
+      Promise.all(events.map(e =>
+        registrationsAPI.getParticipants(e.id).then(data => data.map(p => ({ ...p, event_id: e.id })))
+      ))
         .then(results => setParticipants(results.flat()))
         .catch(console.error);
     }
@@ -286,130 +288,136 @@ export default function OrganizerDashboard({ user, onLogout }) {
     <div style={{ display: "flex", minHeight: "100vh", background: "var(--cream)", fontFamily: "var(--ff-body)", color: "var(--ink)" }}>
 
       {/* Sidebar */}
-      <aside style={{ width: 232, background: "#fff", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", position: "sticky", top: 0, height: "100vh" }}>
-        <div style={{ padding: "26px 24px 18px", borderBottom: "1px solid var(--border)" }}>
-          <img src={logo} alt="Sangam" style={{ height:36, width:"auto", objectFit:"contain", marginBottom:6 }} />
-          <div style={{ marginTop: 6, display: "inline-block", background: "rgba(244,160,35,.12)", color: "#b06a00", border: "1px solid rgba(244,160,35,.3)", borderRadius: 100, padding: "2px 12px", fontSize: "0.68rem", fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase" }}>Organizer Portal</div>
+      <aside style={{ width: 224, background: "#fff", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", position: "sticky", top: 0, height: "100vh" }}>
+        <div style={{ padding: "24px 20px 18px" }}>
+          <img src={logo} alt="Sangam" style={{ height: 32, width: "auto", objectFit: "contain" }} />
+          <div style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(244,160,35,.1)", color: "#b06a00", border: "1px solid rgba(244,160,35,.2)", borderRadius: 6, padding: "3px 10px", fontSize: "0.65rem", fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase" }}>Organizer Portal</div>
         </div>
 
-        <nav style={{ flex: 1, padding: "20px 12px", display: "flex", flexDirection: "column", gap: 2 }}>
+        <div style={{ height: 1, background: "var(--border)", margin: "0 20px" }} />
+
+        <nav style={{ flex: 1, padding: "14px 10px", display: "flex", flexDirection: "column", gap: 1 }}>
           {NAV.map(item => (
-            <button key={item.id} onClick={() => setActiveTab(item.id)}
-              style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 14px", borderRadius: 12, border: "none", background: activeTab === item.id ? "rgba(244,160,35,.1)" : "transparent", color: activeTab === item.id ? "var(--saffron-g)" : "var(--muted)", cursor: "pointer", fontSize: "0.88rem", fontFamily: "var(--ff-body)", fontWeight: activeTab === item.id ? 700 : 500, textAlign: "left", transition: "all .2s", borderLeft: activeTab === item.id ? "2.5px solid var(--saffron)" : "2.5px solid transparent" }}>
-              <span style={{ fontSize: "0.82rem", opacity: activeTab === item.id ? 1 : 0.6 }}>{item.icon}</span>
+            <button key={item.id} onClick={() => setActiveTab(item.id)} className="org-nav-btn"
+              style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, border: "none", background: activeTab === item.id ? "rgba(244,160,35,.1)" : "transparent", color: activeTab === item.id ? "#b06a00" : "var(--muted)", cursor: "pointer", fontSize: "0.85rem", fontFamily: "var(--ff-body)", fontWeight: activeTab === item.id ? 700 : 500, textAlign: "left", transition: "all .18s", borderLeft: activeTab === item.id ? "2px solid var(--saffron)" : "2px solid transparent" }}>
+              <span style={{ fontSize: "0.78rem", opacity: activeTab === item.id ? 1 : 0.5, width: 16, textAlign: "center" }}>{item.icon}</span>
               {item.label}
             </button>
           ))}
         </nav>
 
-        <div style={{ padding: "18px 16px", borderTop: "1px solid var(--border)" }}>
+        <div style={{ height: 1, background: "var(--border)", margin: "0 20px" }} />
+        <div style={{ padding: "14px 16px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg,#f4a023,#e85d04)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.78rem", fontWeight: 800, color: "#fff", flexShrink: 0 }}>{user?.name?.[0] || "R"}</div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: "0.82rem", fontWeight: 700 }}>{user?.name || "Organizer"}</div>
-              <div style={{ fontSize: "0.72rem", color: "var(--muted)" }}>Event Organizer</div>
+            <div style={{ width: 34, height: 34, borderRadius: "50%", background: "linear-gradient(135deg,#f4a023,#e85d04)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.75rem", fontWeight: 800, color: "#fff", flexShrink: 0 }}>{user?.name?.[0] || "R"}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: "0.8rem", fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user?.name || "Organizer"}</div>
+              <div style={{ fontSize: "0.68rem", color: "var(--muted)" }}>Event Organizer</div>
             </div>
-            <button onClick={onLogout} style={{ background: "transparent", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600 }}>Logout</button>
+            <button onClick={onLogout} title="Logout" style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: 8, color: "var(--muted)", cursor: "pointer", fontSize: "0.7rem", fontWeight: 600, padding: "4px 8px" }}>↩</button>
           </div>
         </div>
       </aside>
 
       {/* Main */}
-      <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
         {/* Topbar */}
-        <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 36px", borderBottom: "1px solid var(--border)", background: "#fff", position: "sticky", top: 0, zIndex: 10 }}>
+        <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 32px", borderBottom: "1px solid var(--border)", background: "rgba(255,255,255,.95)", backdropFilter: "blur(12px)", position: "sticky", top: 0, zIndex: 10 }}>
           <div>
-            <h1 style={{ fontFamily: "var(--ff-display)", fontWeight: 900, fontSize: "1.5rem" }}>{pageTitle}</h1>
-            <p style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: 2 }}>
-              <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "var(--sage)", marginRight: 5, animation: "pulse-dot 2s infinite", verticalAlign: "middle" }}/>
+            <h1 style={{ fontFamily: "var(--ff-display)", fontWeight: 900, fontSize: "1.4rem", letterSpacing: "-.01em" }}>{pageTitle}</h1>
+            <p style={{ fontSize: "0.72rem", color: "var(--muted)", marginTop: 3, display: "flex", alignItems: "center", gap: 5 }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--sage)", display: "inline-block", animation: "pulse-dot 2s infinite" }}/>
               Welcome back, {user?.name || "Organizer"} · {new Date().toLocaleDateString("en-IN", { weekday: "long", month: "long", day: "numeric" })}
             </p>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 100, padding: "0 16px", gap: 8 }}>
-              <span style={{ fontSize: "0.8rem", color: "var(--muted)" }}>🔍</span>
-              <input style={{ background: "transparent", border: "none", outline: "none", color: "var(--ink)", fontSize: "0.85rem", padding: "9px 0", width: 160, fontFamily: "var(--ff-body)" }} placeholder="Search…" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "0 14px", gap: 7 }}>
+              <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>🔍</span>
+              <input style={{ background: "transparent", border: "none", outline: "none", color: "var(--ink)", fontSize: "0.83rem", padding: "8px 0", width: 150, fontFamily: "var(--ff-body)" }} placeholder="Search…" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
             </div>
             <button onClick={() => { setShowModal(true); setEditingId(null); setForm(emptyForm); setFormError(""); }}
-              style={{ padding: "9px 22px", background: "var(--ink)", color: "var(--cream)", border: "none", borderRadius: 100, fontFamily: "var(--ff-body)", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer", letterSpacing: ".02em" }}>
-              + Create Event
+              style={{ padding: "9px 20px", background: "var(--ink)", color: "var(--cream)", border: "none", borderRadius: 10, fontFamily: "var(--ff-body)", fontWeight: 700, fontSize: "0.83rem", cursor: "pointer", letterSpacing: ".01em", display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: "1rem", lineHeight: 1 }}>+</span> Create Event
             </button>
           </div>
         </header>
 
-        <div style={{ flex: 1, padding: "32px 36px", overflowY: "auto" }}>
+        <div style={{ flex: 1, padding: "28px 32px", overflowY: "auto" }}>
 
           {/* OVERVIEW */}
           {activeTab === "overview" && (
-            <div style={{ animation: "fadeUp .5s ease both" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 32 }}>
+            <div style={{ animation: "fadeUp .4s ease both" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 28 }}>
                 {[
-                  { label: "Total Events", value: events.length, sub: `${events.filter(e=>e.status==="Active").length} active`, color: "var(--saffron)" },
-                  { label: "Total Registered", value: totalRegistered, sub: `of ${totalCapacity} capacity`, color: "#17885a" },
-                  { label: "Fill Rate", value: Math.round((totalRegistered / totalCapacity) * 100) + "%", sub: "Across all events", color: "var(--indigo)" },
-                  { label: "Draft Events", value: events.filter(e=>e.status==="Draft").length, sub: "Ready to publish", color: "#8b2fcc" },
+                  { label: "Total Events",     value: events.length,                                          sub: `${events.filter(e=>e.status==="Active").length} active`,  color: "var(--saffron)",  icon: "◈" },
+                  { label: "Total Registered", value: totalRegistered,                                        sub: `of ${totalCapacity} capacity`,                            color: "#17885a",         icon: "◉" },
+                  { label: "Fill Rate",        value: totalCapacity > 0 ? Math.round((totalRegistered/totalCapacity)*100)+"%" : "0%", sub: "Across all events",           color: "var(--indigo)",   icon: "✦" },
+                  { label: "Draft Events",     value: events.filter(e=>e.status==="Draft").length,            sub: "Ready to publish",                                        color: "#8b2fcc",         icon: "▦" },
                 ].map((s, i) => (
-                  <div key={i} style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 16, padding: "20px 22px", borderTop: `3px solid ${s.color}` }}>
-                    <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 8 }}>{s.label}</div>
-                    <div style={{ fontFamily: "var(--ff-display)", fontSize: "2rem", fontWeight: 900, color: s.color, marginBottom: 4 }}>{s.value}</div>
-                    <div style={{ fontSize: "0.72rem", color: "var(--muted)" }}>{s.sub}</div>
+                  <div key={i} className="org-card" style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 14, padding: "18px 20px", borderTop: `3px solid ${s.color}` }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                      <div style={{ fontSize: "0.65rem", fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--muted)" }}>{s.label}</div>
+                      <span style={{ fontSize: "0.9rem", color: s.color, opacity: .5 }}>{s.icon}</span>
+                    </div>
+                    <div style={{ fontFamily: "var(--ff-display)", fontSize: "1.9rem", fontWeight: 900, color: s.color, lineHeight: 1, marginBottom: 6 }}>{s.value}</div>
+                    <div style={{ fontSize: "0.7rem", color: "var(--muted)" }}>{s.sub}</div>
                   </div>
                 ))}
               </div>
 
-              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 18 }}>
-                <h2 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1.2rem" }}>Active Events</h2>
-                <button onClick={() => setActiveTab("events")} style={{ background: "transparent", border: "none", color: "var(--saffron-g)", cursor: "pointer", fontSize: "0.85rem", fontFamily: "var(--ff-body)", fontWeight: 700 }}>View All →</button>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                <h2 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1.1rem" }}>Active Events</h2>
+                <button onClick={() => setActiveTab("events")} style={{ background: "transparent", border: "none", color: "var(--saffron-g)", cursor: "pointer", fontSize: "0.82rem", fontFamily: "var(--ff-body)", fontWeight: 700 }}>View All →</button>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 18, marginBottom: 36 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 32 }}>
                 {events.filter(e => e.status === "Active").map(ev => (
-                  <div key={ev.id} style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 18, overflow: "hidden" }}>
-                    <div style={{ height: 110, background: ev.grad, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px" }}>
-                      <span style={{ fontSize: "2.5rem" }}>{ev.image}</span>
+                  <div key={ev.id} className="org-card" style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 16, overflow: "hidden" }}>
+                    <div style={{ height: 100, background: ev.grad, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 18px" }}>
+                      <span style={{ fontSize: "2.2rem" }}>{ev.image}</span>
                       <StatusPill label={ev.status} />
                     </div>
-                    <div style={{ padding: "16px 18px" }}>
-                      <h3 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "0.95rem", marginBottom: 6 }}>{ev.title}</h3>
-                      <div style={{ fontSize: "0.75rem", color: "var(--muted)", marginBottom: 14 }}>📅 {ev.date} · 📍 {ev.location}</div>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "var(--muted)", marginBottom: 8 }}>
+                    <div style={{ padding: "14px 16px" }}>
+                      <h3 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "0.92rem", marginBottom: 5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ev.title}</h3>
+                      <div style={{ fontSize: "0.72rem", color: "var(--muted)", marginBottom: 12 }}>📅 {ev.date} · 📍 {ev.location}</div>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "var(--muted)", marginBottom: 6 }}>
                         <span>Registrations</span>
                         <span style={{ fontWeight: 700, color: "var(--ink)" }}>{ev.registered}/{ev.capacity}</span>
                       </div>
-                      <div style={{ height: 6, background: "var(--surface)", borderRadius: 3, overflow: "hidden", marginBottom: 14 }}>
+                      <div style={{ height: 5, background: "var(--surface)", borderRadius: 3, overflow: "hidden", marginBottom: 12 }}>
                         <div style={{ width: `${Math.min((ev.registered / ev.capacity) * 100, 100)}%`, height: "100%", background: ev.grad, borderRadius: 3, transition: "width .5s ease" }}/>
                       </div>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <button onClick={() => handleEdit(ev)} style={{ flex: 1, padding: "8px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, cursor: "pointer", fontSize: "0.78rem", fontFamily: "var(--ff-body)", color: "var(--ink)" }}>✏️ Edit</button>
-                        <button onClick={() => { setSelectedEvent(ev); setActiveTab("participants"); }} style={{ flex: 1, padding: "8px", background: "rgba(244,160,35,.1)", border: "1px solid rgba(244,160,35,.3)", borderRadius: 10, cursor: "pointer", fontSize: "0.78rem", fontFamily: "var(--ff-body)", color: "var(--saffron-g)", fontWeight: 600 }}>👥 View</button>
+                      <div style={{ display: "flex", gap: 7 }}>
+                        <button onClick={() => handleEdit(ev)} style={{ flex: 1, padding: "7px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, cursor: "pointer", fontSize: "0.75rem", fontFamily: "var(--ff-body)", color: "var(--ink)" }}>✏️ Edit</button>
+                        <button onClick={() => { setSelectedEvent(ev); setActiveTab("participants"); }} style={{ flex: 1, padding: "7px", background: "rgba(244,160,35,.08)", border: "1px solid rgba(244,160,35,.25)", borderRadius: 8, cursor: "pointer", fontSize: "0.75rem", fontFamily: "var(--ff-body)", color: "var(--saffron-g)", fontWeight: 600 }}>👥 View</button>
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
 
-              <h2 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1.2rem", marginBottom: 16 }}>Recent Registrations</h2>
-              <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 16, overflow: "hidden" }}>
-                <table style={{ width: "100%", fontSize: "0.85rem" }}>
+              <h2 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1.1rem", marginBottom: 14 }}>Recent Registrations</h2>
+              <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden" }}>
+                <table style={{ width: "100%", fontSize: "0.83rem" }}>
                   <thead>
-                    <tr>
+                    <tr style={{ background: "var(--surface)" }}>
                       {["Name","Email","Status","Registered On"].map(h => (
-                        <th key={h} style={{ textAlign: "left", padding: "13px 20px", color: "var(--muted)", fontSize: "0.7rem", fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", background: "var(--surface)", borderBottom: "1px solid var(--border)" }}>{h}</th>
+                        <th key={h} style={{ textAlign: "left", padding: "11px 18px", color: "var(--muted)", fontSize: "0.67rem", fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", borderBottom: "1px solid var(--border)" }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {participants.slice(0, 4).map(p => (
-                      <tr key={p.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                        <td style={{ padding: "13px 20px" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <div style={{ width: 30, height: 30, borderRadius: "50%", background: "linear-gradient(135deg,var(--saffron),var(--saffron-g))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.7rem", fontWeight: 800, color: "#fff", flexShrink: 0 }}>{p.name?.[0] || "?"}</div>
+                      <tr key={p.id} className="org-row" style={{ borderBottom: "1px solid var(--border)", transition: "background .15s" }}>
+                        <td style={{ padding: "12px 18px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                            <div style={{ width: 28, height: 28, borderRadius: "50%", background: "linear-gradient(135deg,var(--saffron),var(--saffron-g))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.68rem", fontWeight: 800, color: "#fff", flexShrink: 0 }}>{p.name?.[0] || "?"}</div>
                             <span style={{ fontWeight: 600 }}>{p.name}</span>
                           </div>
                         </td>
-                        <td style={{ padding: "13px 20px", color: "var(--muted)" }}>{p.email}</td>
-                        <td style={{ padding: "13px 20px" }}><StatusPill label={p.status} /></td>
-                        <td style={{ padding: "13px 20px", color: "var(--muted)" }}>{p.registered_at ? new Date(p.registered_at).toLocaleDateString("en-IN") : "-"}</td>
+                        <td style={{ padding: "12px 18px", color: "var(--muted)" }}>{p.email}</td>
+                        <td style={{ padding: "12px 18px" }}><StatusPill label={p.status} /></td>
+                        <td style={{ padding: "12px 18px", color: "var(--muted)" }}>{p.registered_at ? new Date(p.registered_at).toLocaleDateString("en-IN") : "-"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -420,39 +428,39 @@ export default function OrganizerDashboard({ user, onLogout }) {
 
           {/* EVENTS */}
           {activeTab === "events" && (
-            <div style={{ animation: "fadeUp .5s ease both" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-                <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ animation: "fadeUp .4s ease both" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+                <div style={{ display: "flex", gap: 6, background: "var(--surface)", borderRadius: 10, padding: 4 }}>
                   {["All","Active","Draft","Paused"].map(s => (
                     <button key={s} onClick={() => setFilterStatus(s)}
-                      style={{ padding: "7px 18px", borderRadius: 100, border: filterStatus === s ? "none" : "1px solid var(--border)", background: filterStatus === s ? "var(--ink)" : "#fff", color: filterStatus === s ? "var(--cream)" : "var(--muted)", cursor: "pointer", fontSize: "0.8rem", fontFamily: "var(--ff-body)", fontWeight: 600, transition: "all .2s" }}>
+                      style={{ padding: "6px 16px", borderRadius: 8, border: "none", background: filterStatus === s ? "#fff" : "transparent", color: filterStatus === s ? "var(--ink)" : "var(--muted)", cursor: "pointer", fontSize: "0.78rem", fontFamily: "var(--ff-body)", fontWeight: filterStatus === s ? 700 : 500, transition: "all .18s", boxShadow: filterStatus === s ? "var(--shadow-sm)" : "none" }}>
                       {s}
                     </button>
                   ))}
                 </div>
                 <button onClick={() => { setShowModal(true); setEditingId(null); setForm(emptyForm); setFormError(""); }}
-                  style={{ padding: "9px 20px", background: "var(--ink)", color: "var(--cream)", border: "none", borderRadius: 100, fontFamily: "var(--ff-body)", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer" }}>+ New Event</button>
+                  style={{ padding: "8px 18px", background: "var(--ink)", color: "var(--cream)", border: "none", borderRadius: 10, fontFamily: "var(--ff-body)", fontWeight: 700, fontSize: "0.8rem", cursor: "pointer" }}>+ New Event</button>
               </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {filtered.map(ev => (
-                  <div key={ev.id} style={{ display: "flex", alignItems: "center", gap: 16, background: "#fff", border: "1px solid var(--border)", borderRadius: 16, padding: "16px 20px" }}>
-                    <div style={{ width: 50, height: 50, borderRadius: 14, background: ev.grad, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.4rem", flexShrink: 0 }}>{ev.image}</div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: "0.9rem", fontFamily: "var(--ff-display)" }}>{ev.title}</div>
-                      <div style={{ fontSize: "0.72rem", color: "var(--muted)", marginTop: 3 }}>📅 {ev.date} {ev.time} · 📍 {ev.location} · 🏷️ {ev.category}</div>
+                  <div key={ev.id} className="org-row" style={{ display: "flex", alignItems: "center", gap: 14, background: "#fff", border: "1px solid var(--border)", borderRadius: 14, padding: "14px 18px", transition: "background .15s" }}>
+                    <div style={{ width: 46, height: 46, borderRadius: 12, background: ev.grad, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.3rem", flexShrink: 0 }}>{ev.image}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: "0.88rem", fontFamily: "var(--ff-display)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ev.title}</div>
+                      <div style={{ fontSize: "0.7rem", color: "var(--muted)", marginTop: 3 }}>📅 {ev.date} {ev.time} · 📍 {ev.location} · 🏷️ {ev.category}</div>
                     </div>
-                    <div style={{ width: 130 }}>
-                      <div style={{ height: 5, background: "var(--surface)", borderRadius: 3, overflow: "hidden", marginBottom: 4 }}>
+                    <div style={{ width: 120 }}>
+                      <div style={{ height: 4, background: "var(--surface)", borderRadius: 3, overflow: "hidden", marginBottom: 4 }}>
                         <div style={{ width: `${Math.min((ev.registered / ev.capacity) * 100, 100)}%`, height: "100%", background: ev.grad, borderRadius: 3 }}/>
                       </div>
-                      <span style={{ fontSize: "0.7rem", color: "var(--muted)" }}>{ev.registered}/{ev.capacity}</span>
+                      <span style={{ fontSize: "0.68rem", color: "var(--muted)" }}>{ev.registered}/{ev.capacity} registered</span>
                     </div>
                     <StatusPill label={ev.status} />
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button onClick={() => handleEdit(ev)} style={{ width: 32, height: 32, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, cursor: "pointer", fontSize: "0.85rem", display: "flex", alignItems: "center", justifyContent: "center" }}>✏️</button>
-                      <button onClick={() => toggleStatus(ev.id)} style={{ width: 32, height: 32, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, cursor: "pointer", fontSize: "0.85rem", display: "flex", alignItems: "center", justifyContent: "center" }}>{ev.status === "Active" ? "⏸️" : "▶️"}</button>
-                      <button onClick={() => setConfirmDelete(ev.id)} style={{ width: 32, height: 32, background: "rgba(196,32,80,.06)", border: "1px solid rgba(196,32,80,.15)", borderRadius: 8, cursor: "pointer", fontSize: "0.85rem", display: "flex", alignItems: "center", justifyContent: "center" }}>🗑️</button>
+                    <div style={{ display: "flex", gap: 5 }}>
+                      <button onClick={() => handleEdit(ev)} className="org-action-btn" style={{ width: 30, height: 30, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, cursor: "pointer", fontSize: "0.8rem", display: "flex", alignItems: "center", justifyContent: "center" }}>✏️</button>
+                      <button onClick={() => toggleStatus(ev.id)} className="org-action-btn" style={{ width: 30, height: 30, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, cursor: "pointer", fontSize: "0.8rem", display: "flex", alignItems: "center", justifyContent: "center" }}>{ev.status === "Active" ? "⏸️" : "▶️"}</button>
+                      <button onClick={() => setConfirmDelete(ev.id)} className="org-action-btn" style={{ width: 30, height: 30, background: "rgba(196,32,80,.05)", border: "1px solid rgba(196,32,80,.12)", borderRadius: 8, cursor: "pointer", fontSize: "0.8rem", display: "flex", alignItems: "center", justifyContent: "center" }}>🗑️</button>
                     </div>
                   </div>
                 ))}
@@ -462,46 +470,58 @@ export default function OrganizerDashboard({ user, onLogout }) {
 
           {/* PARTICIPANTS */}
           {activeTab === "participants" && (
-            <div style={{ animation: "fadeUp .5s ease both" }}>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20 }}>
-                {events.map(e => (
-                  <button key={e.id} onClick={() => setSelectedEvent(e)}
-                    style={{ padding: "7px 16px", borderRadius: 100, border: selectedEvent?.id === e.id ? "none" : "1px solid var(--border)", background: selectedEvent?.id === e.id ? "var(--ink)" : "#fff", color: selectedEvent?.id === e.id ? "var(--cream)" : "var(--muted)", cursor: "pointer", fontSize: "0.78rem", fontFamily: "var(--ff-body)", fontWeight: 600, transition: "all .2s" }}>
-                    {e.title.slice(0, 20)}…
-                  </button>
-                ))}
+            <div style={{ animation: "fadeUp .4s ease both" }}>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 18 }}>
                 <button onClick={() => setSelectedEvent(null)}
-                  style={{ padding: "7px 16px", borderRadius: 100, border: selectedEvent === null ? "none" : "1px solid var(--border)", background: selectedEvent === null ? "var(--ink)" : "#fff", color: selectedEvent === null ? "var(--cream)" : "var(--muted)", cursor: "pointer", fontSize: "0.78rem", fontFamily: "var(--ff-body)", fontWeight: 600, transition: "all .2s" }}>
+                  style={{ padding: "6px 14px", borderRadius: 8, border: selectedEvent === null ? "none" : "1px solid var(--border)", background: selectedEvent === null ? "var(--ink)" : "#fff", color: selectedEvent === null ? "var(--cream)" : "var(--muted)", cursor: "pointer", fontSize: "0.75rem", fontFamily: "var(--ff-body)", fontWeight: 600, transition: "all .18s" }}>
                   All Events
                 </button>
+                {events.map(e => (
+                  <button key={e.id} onClick={() => setSelectedEvent(e)}
+                    style={{ padding: "6px 14px", borderRadius: 8, border: selectedEvent?.id === e.id ? "none" : "1px solid var(--border)", background: selectedEvent?.id === e.id ? "var(--ink)" : "#fff", color: selectedEvent?.id === e.id ? "var(--cream)" : "var(--muted)", cursor: "pointer", fontSize: "0.75rem", fontFamily: "var(--ff-body)", fontWeight: 600, transition: "all .18s" }}>
+                    {e.title.slice(0, 22)}{e.title.length > 22 ? "…" : ""}
+                  </button>
+                ))}
               </div>
 
-              <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 16, overflow: "hidden" }}>
-                <table style={{ width: "100%", fontSize: "0.85rem" }}>
+              <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden" }}>
+                <table style={{ width: "100%", fontSize: "0.83rem" }}>
                   <thead>
-                    <tr>
+                    <tr style={{ background: "var(--surface)" }}>
                       {["#","Participant","Email","Status","Registered On","Actions"].map(h => (
-                        <th key={h} style={{ textAlign: "left", padding: "13px 20px", color: "var(--muted)", fontSize: "0.7rem", fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", background: "var(--surface)", borderBottom: "1px solid var(--border)" }}>{h}</th>
+                        <th key={h} style={{ textAlign: "left", padding: "11px 18px", color: "var(--muted)", fontSize: "0.67rem", fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", borderBottom: "1px solid var(--border)" }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {participants.map((p, i) => (
-                      <tr key={p.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                        <td style={{ padding: "13px 20px", color: "var(--muted)" }}>{i+1}</td>
-                        <td style={{ padding: "13px 20px" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <div style={{ width: 30, height: 30, borderRadius: "50%", background: "linear-gradient(135deg,var(--saffron),var(--saffron-g))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.7rem", fontWeight: 800, color: "#fff", flexShrink: 0 }}>{p.name?.[0] || "?"}</div>
+                      <tr key={p.id} className="org-row" style={{ borderBottom: "1px solid var(--border)", transition: "background .15s" }}>
+                        <td style={{ padding: "12px 18px", color: "var(--muted)", fontSize: "0.75rem" }}>{i+1}</td>
+                        <td style={{ padding: "12px 18px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                            <div style={{ width: 28, height: 28, borderRadius: "50%", background: "linear-gradient(135deg,var(--saffron),var(--saffron-g))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.68rem", fontWeight: 800, color: "#fff", flexShrink: 0 }}>{p.name?.[0] || "?"}</div>
                             <span style={{ fontWeight: 600 }}>{p.name}</span>
                           </div>
                         </td>
-                        <td style={{ padding: "13px 20px", color: "var(--muted)" }}>{p.email}</td>
-                        <td style={{ padding: "13px 20px" }}><StatusPill label={p.status} /></td>
-                        <td style={{ padding: "13px 20px", color: "var(--muted)" }}>{p.registered_at ? new Date(p.registered_at).toLocaleDateString("en-IN") : "-"}</td>
-                        <td style={{ padding: "13px 20px" }}>
-                          <div style={{ display: "flex", gap: 8 }}>
-                            <button onClick={() => registrationsAPI.updateStatus(selectedEvent?.id, p.id, "Confirmed").then(() => registrationsAPI.getParticipants(selectedEvent?.id).then(setParticipants))} style={{ width: 32, height: 32, background: "rgba(23,136,90,.08)", border: "1px solid rgba(23,136,90,.2)", borderRadius: 8, cursor: "pointer", fontSize: "0.85rem", display: "flex", alignItems: "center", justifyContent: "center" }}>✅</button>
-                            <button onClick={() => registrationsAPI.updateStatus(selectedEvent?.id, p.id, "Cancelled").then(() => registrationsAPI.getParticipants(selectedEvent?.id).then(setParticipants))} style={{ width: 32, height: 32, background: "rgba(196,32,80,.06)", border: "1px solid rgba(196,32,80,.15)", borderRadius: 8, cursor: "pointer", fontSize: "0.85rem", display: "flex", alignItems: "center", justifyContent: "center" }}>❌</button>
+                        <td style={{ padding: "12px 18px", color: "var(--muted)" }}>{p.email}</td>
+                        <td style={{ padding: "12px 18px" }}><StatusPill label={p.status} /></td>
+                        <td style={{ padding: "12px 18px", color: "var(--muted)" }}>{p.registered_at ? new Date(p.registered_at).toLocaleDateString("en-IN") : "-"}</td>
+                        <td style={{ padding: "12px 18px" }}>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button onClick={async () => {
+                              await registrationsAPI.updateStatus(p.event_id, p.id, "Confirmed");
+                              const updated = selectedEvent
+                                ? (await registrationsAPI.getParticipants(selectedEvent.id)).map(x => ({ ...x, event_id: selectedEvent.id }))
+                                : (await Promise.all(events.map(e => registrationsAPI.getParticipants(e.id).then(d => d.map(x => ({ ...x, event_id: e.id })))))).flat();
+                              setParticipants(updated);
+                            }} className="org-action-btn" style={{ width: 28, height: 28, background: "rgba(23,136,90,.08)", border: "1px solid rgba(23,136,90,.18)", borderRadius: 7, cursor: "pointer", fontSize: "0.8rem", display: "flex", alignItems: "center", justifyContent: "center" }}>✅</button>
+                            <button onClick={async () => {
+                              await registrationsAPI.updateStatus(p.event_id, p.id, "Cancelled");
+                              const updated = selectedEvent
+                                ? (await registrationsAPI.getParticipants(selectedEvent.id)).map(x => ({ ...x, event_id: selectedEvent.id }))
+                                : (await Promise.all(events.map(e => registrationsAPI.getParticipants(e.id).then(d => d.map(x => ({ ...x, event_id: e.id })))))).flat();
+                              setParticipants(updated);
+                            }} className="org-action-btn" style={{ width: 28, height: 28, background: "rgba(196,32,80,.05)", border: "1px solid rgba(196,32,80,.12)", borderRadius: 7, cursor: "pointer", fontSize: "0.8rem", display: "flex", alignItems: "center", justifyContent: "center" }}>❌</button>
                           </div>
                         </td>
                       </tr>
@@ -693,41 +713,44 @@ export default function OrganizerDashboard({ user, onLogout }) {
 
           {/* ANALYTICS */}
           {activeTab === "analytics" && (
-            <div style={{ animation: "fadeUp .5s ease both" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 32 }}>
+            <div style={{ animation: "fadeUp .4s ease both" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 28 }}>
                 {[
-                  { label: "Total Events",     value: analytics?.totalEvents ?? events.length,     color: "var(--saffron)" },
-                  { label: "Total Registered", value: analytics?.totalRegistered ?? totalRegistered, color: "var(--sage)" },
-                  { label: "Avg. Fill Rate",   value: analytics?.fillRate ?? (totalCapacity > 0 ? Math.round((totalRegistered/totalCapacity)*100)+'%' : '0%'), color: "var(--indigo)" },
-                  { label: "Active Events",    value: analytics?.activeEvents ?? events.filter(e=>e.status==="Active").length, color: "#8b2fcc" },
+                  { label: "Total Events",     value: analytics?.totalEvents ?? events.length,     color: "var(--saffron)", icon: "◈" },
+                  { label: "Total Registered", value: analytics?.totalRegistered ?? totalRegistered, color: "var(--sage)",    icon: "◉" },
+                  { label: "Avg. Fill Rate",   value: analytics?.fillRate ?? (totalCapacity > 0 ? Math.round((totalRegistered/totalCapacity)*100)+'%' : '0%'), color: "var(--indigo)", icon: "✦" },
+                  { label: "Active Events",    value: analytics?.activeEvents ?? events.filter(e=>e.status==="Active").length, color: "#8b2fcc", icon: "▦" },
                 ].map((s, i) => (
-                  <div key={i} style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 16, padding: "20px 22px", borderTop: `3px solid ${s.color}` }}>
-                    <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 8 }}>{s.label}</div>
-                    <div style={{ fontFamily: "var(--ff-display)", fontSize: "2rem", fontWeight: 900, color: s.color }}>{s.value}</div>
+                  <div key={i} className="org-card" style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 14, padding: "18px 20px", borderTop: `3px solid ${s.color}` }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                      <div style={{ fontSize: "0.65rem", fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--muted)" }}>{s.label}</div>
+                      <span style={{ fontSize: "0.9rem", color: s.color, opacity: .5 }}>{s.icon}</span>
+                    </div>
+                    <div style={{ fontFamily: "var(--ff-display)", fontSize: "1.9rem", fontWeight: 900, color: s.color, lineHeight: 1 }}>{s.value}</div>
                   </div>
                 ))}
               </div>
 
-              <h2 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1.2rem", marginBottom: 18 }}>Event Performance</h2>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 18 }}>
+              <h2 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1.1rem", marginBottom: 16 }}>Event Performance</h2>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
                 {events.map(ev => (
-                  <div key={ev.id} style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 18, padding: 22 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
-                      <div style={{ width: 48, height: 48, borderRadius: 14, background: ev.grad, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.5rem" }}>{ev.image}</div>
-                      <div>
-                        <div style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "0.9rem" }}>{ev.title}</div>
-                        <div style={{ fontSize: "0.72rem", color: "var(--muted)" }}>{ev.category}</div>
+                  <div key={ev.id} className="org-card" style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 16, padding: 20 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+                      <div style={{ width: 44, height: 44, borderRadius: 12, background: ev.grad, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.4rem", flexShrink: 0 }}>{ev.image}</div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "0.88rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ev.title}</div>
+                        <div style={{ fontSize: "0.7rem", color: "var(--muted)", marginTop: 2 }}>{ev.category}</div>
                       </div>
                     </div>
-                    <div style={{ display: "flex", gap: 18, marginBottom: 14 }}>
+                    <div style={{ display: "flex", gap: 16, marginBottom: 12 }}>
                       {[["Registered", ev.registered], ["Capacity", ev.capacity], ["Fill %", Math.round((ev.registered / ev.capacity) * 100) + "%"]].map(([l, v]) => (
                         <div key={l}>
-                          <div style={{ fontFamily: "var(--ff-display)", fontSize: "1.3rem", fontWeight: 700, color: ev.color }}>{v}</div>
-                          <div style={{ fontSize: "0.68rem", color: "var(--muted)", marginTop: 2 }}>{l}</div>
+                          <div style={{ fontFamily: "var(--ff-display)", fontSize: "1.2rem", fontWeight: 700, color: ev.color }}>{v}</div>
+                          <div style={{ fontSize: "0.65rem", color: "var(--muted)", marginTop: 2, textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 600 }}>{l}</div>
                         </div>
                       ))}
                     </div>
-                    <div style={{ height: 6, background: "var(--surface)", borderRadius: 3, overflow: "hidden" }}>
+                    <div style={{ height: 5, background: "var(--surface)", borderRadius: 3, overflow: "hidden" }}>
                       <div style={{ width: `${Math.min((ev.registered / ev.capacity) * 100, 100)}%`, height: "100%", background: ev.grad, borderRadius: 3 }}/>
                     </div>
                   </div>
@@ -738,19 +761,14 @@ export default function OrganizerDashboard({ user, onLogout }) {
 
           {/* SETTINGS */}
           {activeTab === "settings" && (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, animation: "fadeUp .5s ease both" }}>
-              <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 20, padding: 28 }}>
-                <h3 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1.1rem", marginBottom: 20 }}>Organizer Profile</h3>
-                <div style={{ width: 72, height: 72, borderRadius: "50%", background: "linear-gradient(135deg,#f4a023,#e85d04)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.4rem", fontWeight: 900, color: "#fff", margin: "0 auto 24px" }}>{user?.name?.[0] || "O"}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, animation: "fadeUp .4s ease both" }}>
+              <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 18, padding: 26 }}>
+                <h3 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1.05rem", marginBottom: 18 }}>Organizer Profile</h3>
+                <div style={{ width: 64, height: 64, borderRadius: "50%", background: "linear-gradient(135deg,#f4a023,#e85d04)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.3rem", fontWeight: 900, color: "#fff", margin: "0 auto 22px" }}>{user?.name?.[0] || "O"}</div>
                 {[["Full Name", "name", user?.name || ""],["Email", "email", user?.email || ""],["Phone", "phone", ""],["Organization", "institution", ""],["City", "city", ""]].map(([l, field, defaultVal]) => (
-                  <div key={l} style={{ marginBottom: 14 }}>
+                  <div key={l} style={{ marginBottom: 12 }}>
                     <label style={labelStyle}>{l}</label>
-                    <input
-                      id={`settings-${field}`}
-                      style={inputStyle}
-                      defaultValue={defaultVal}
-                      readOnly={field === "email"}
-                    />
+                    <input id={`settings-${field}`} style={inputStyle} defaultValue={defaultVal} readOnly={field === "email"} />
                   </div>
                 ))}
                 <button onClick={async () => {
@@ -763,16 +781,16 @@ export default function OrganizerDashboard({ user, onLogout }) {
                     });
                     alert("Profile saved!");
                   } catch (err) { alert(err.message); }
-                }} style={{ marginTop: 6, width: "100%", padding: "11px", background: "var(--ink)", border: "none", borderRadius: 100, color: "var(--cream)", cursor: "pointer", fontWeight: 700, fontSize: "0.88rem", fontFamily: "var(--ff-body)" }}>Save Changes →</button>
+                }} style={{ marginTop: 8, width: "100%", padding: "11px", background: "var(--ink)", border: "none", borderRadius: 10, color: "var(--cream)", cursor: "pointer", fontWeight: 700, fontSize: "0.85rem", fontFamily: "var(--ff-body)" }}>Save Changes →</button>
               </div>
 
-              <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 20, padding: 28 }}>
-                <h3 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1.1rem", marginBottom: 20 }}>Notification Preferences</h3>
+              <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 18, padding: 26 }}>
+                <h3 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1.05rem", marginBottom: 18 }}>Notification Preferences</h3>
                 {["Email on new registration","SMS alerts for capacity warnings","Daily summary report","Participant message notifications","Event reminder alerts"].map((pref, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 0", borderBottom: "1px solid var(--border)" }}>
-                    <span style={{ fontSize: "0.88rem" }}>{pref}</span>
-                    <div style={{ width: 46, height: 24, borderRadius: 12, background: i < 3 ? "var(--ink)" : "var(--border)", position: "relative", cursor: "pointer", transition: "background .2s" }}>
-                      <div style={{ width: 18, height: 18, borderRadius: "50%", background: "#fff", position: "absolute", top: 3, left: i < 3 ? 25 : 3, transition: "left .2s" }}/>
+                  <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 0", borderBottom: "1px solid var(--border)" }}>
+                    <span style={{ fontSize: "0.85rem" }}>{pref}</span>
+                    <div style={{ width: 42, height: 22, borderRadius: 11, background: i < 3 ? "var(--ink)" : "var(--border)", position: "relative", cursor: "pointer", transition: "background .2s", flexShrink: 0 }}>
+                      <div style={{ width: 16, height: 16, borderRadius: "50%", background: "#fff", position: "absolute", top: 3, left: i < 3 ? 23 : 3, transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,.15)" }}/>
                     </div>
                   </div>
                 ))}
@@ -786,12 +804,12 @@ export default function OrganizerDashboard({ user, onLogout }) {
       {/* CREATE/EDIT MODAL */}
       {showModal && (
         <div onClick={() => setShowModal(false)}
-          style={{ position: "fixed", inset: 0, background: "rgba(12,12,20,.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, backdropFilter: "blur(4px)" }}>
+          style={{ position: "fixed", inset: 0, background: "rgba(12,12,20,.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, backdropFilter: "blur(6px)" }}>
           <div onClick={e => e.stopPropagation()}
-            style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 24, width: "90%", maxWidth: 580, maxHeight: "90vh", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 32px 80px rgba(0,0,0,.2)" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "22px 28px", borderBottom: "1px solid var(--border)" }}>
-              <h2 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1.2rem" }}>{editingId ? "Edit Event" : "Create New Event"}</h2>
-              <button onClick={() => { setShowModal(false); setFormError(""); }} style={{ background: "transparent", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: "1.1rem", width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+            style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 20, width: "90%", maxWidth: 560, maxHeight: "90vh", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 24px 64px rgba(0,0,0,.18)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 26px", borderBottom: "1px solid var(--border)" }}>
+              <h2 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1.15rem" }}>{editingId ? "Edit Event" : "Create New Event"}</h2>
+              <button onClick={() => { setShowModal(false); setFormError(""); }} style={{ background: "var(--surface)", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: "0.9rem", width: 30, height: 30, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
             </div>
             <div style={{ padding: "6px 28px 20px", overflowY: "auto", flex: 1 }}>
               <div style={{ display: "flex", gap: 12 }}>
@@ -887,17 +905,17 @@ export default function OrganizerDashboard({ user, onLogout }) {
       {/* DELETE CONFIRM */}
       {confirmDelete && (
         <div onClick={() => setConfirmDelete(null)}
-          style={{ position: "fixed", inset: 0, background: "rgba(12,12,20,.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, backdropFilter: "blur(4px)" }}>
+          style={{ position: "fixed", inset: 0, background: "rgba(12,12,20,.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, backdropFilter: "blur(6px)" }}>
           <div onClick={e => e.stopPropagation()}
-            style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 20, width: "90%", maxWidth: 380, boxShadow: "0 24px 60px rgba(0,0,0,.18)", overflow: "hidden" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid var(--border)" }}>
-              <h2 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1.1rem" }}>Delete Event?</h2>
-              <button onClick={() => setConfirmDelete(null)} style={{ background: "transparent", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: "1.1rem" }}>✕</button>
+            style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 18, width: "90%", maxWidth: 360, boxShadow: "0 20px 50px rgba(0,0,0,.15)", overflow: "hidden" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 22px", borderBottom: "1px solid var(--border)" }}>
+              <h2 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "1.05rem" }}>Delete Event?</h2>
+              <button onClick={() => setConfirmDelete(null)} style={{ background: "var(--surface)", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: "0.9rem", width: 28, height: 28, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
             </div>
-            <p style={{ padding: "18px 24px", color: "var(--muted)", fontSize: "0.88rem", lineHeight: 1.6 }}>This will permanently delete the event and all registrations. This action cannot be undone.</p>
-            <div style={{ display: "flex", gap: 10, padding: "16px 24px", borderTop: "1px solid var(--border)", justifyContent: "flex-end" }}>
-              <button onClick={() => setConfirmDelete(null)} style={{ padding: "10px 20px", background: "transparent", border: "1px solid var(--border)", borderRadius: 100, color: "var(--muted)", cursor: "pointer", fontSize: "0.85rem", fontFamily: "var(--ff-body)" }}>Cancel</button>
-              <button onClick={() => handleDelete(confirmDelete)} style={{ padding: "10px 22px", background: "#c42050", border: "none", borderRadius: 100, color: "#fff", cursor: "pointer", fontWeight: 700, fontSize: "0.85rem", fontFamily: "var(--ff-body)" }}>Delete</button>
+            <p style={{ padding: "16px 22px", color: "var(--muted)", fontSize: "0.85rem", lineHeight: 1.6 }}>This will permanently delete the event and all registrations. This action cannot be undone.</p>
+            <div style={{ display: "flex", gap: 8, padding: "14px 22px", borderTop: "1px solid var(--border)", justifyContent: "flex-end" }}>
+              <button onClick={() => setConfirmDelete(null)} style={{ padding: "9px 18px", background: "transparent", border: "1px solid var(--border)", borderRadius: 10, color: "var(--muted)", cursor: "pointer", fontSize: "0.83rem", fontFamily: "var(--ff-body)" }}>Cancel</button>
+              <button onClick={() => handleDelete(confirmDelete)} style={{ padding: "9px 20px", background: "#c42050", border: "none", borderRadius: 10, color: "#fff", cursor: "pointer", fontWeight: 700, fontSize: "0.83rem", fontFamily: "var(--ff-body)" }}>Delete</button>
             </div>
           </div>
         </div>

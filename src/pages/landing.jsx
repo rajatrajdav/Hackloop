@@ -433,10 +433,14 @@ export default function Landing({ onLoginClick }) {
         {/* Background Video */}
         <video autoPlay muted loop playsInline style={{
           position:"absolute", inset:0, width:"100%", height:"100%",
-          objectFit:"cover", zIndex:0, opacity:0.55,
+          objectFit:"cover", zIndex:0, opacity:0.62,
+          filter:"brightness(1.15) contrast(0.95) saturate(0.75) hue-rotate(15deg)",
         }}>
           <source src={bgVideo} type="video/mp4" />
         </video>
+
+        {/* Video overlay for text readability */}
+        <div style={{ position:"absolute", inset:0, zIndex:0, background:"linear-gradient(105deg,rgba(10,10,20,0.55) 0%,rgba(10,10,20,0.18) 60%,transparent 100%)" }}/>
 
         {/* Left */}
         <div style={{ padding:"80px 64px", display:"flex", flexDirection:"column", justifyContent:"center", position:"relative", zIndex:1 }}>
